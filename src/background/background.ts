@@ -20,11 +20,9 @@ const ICONS = {
   }
 };
 
-
 chrome.runtime.onInstalled.addListener(async (details) => {
   console.log('Slop Block extension installed/updated:', details.reason);
   
-
   if (details.reason === 'install') {
     await setStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);
     await setStorageValue(STORAGE_KEYS.BLUR_MODE, DEFAULT_VALUES[STORAGE_KEYS.BLUR_MODE]);
@@ -32,7 +30,6 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     await setStorageValue(STORAGE_KEYS.USER_WHITELIST, DEFAULT_VALUES[STORAGE_KEYS.USER_WHITELIST]);
   }
   
-
   const isEnabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);
   await updateIcon(isEnabled);
 });
@@ -50,7 +47,8 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         await updateIcon(message.enabled);
         chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
           if (tabs[0]?.id) {
-            chrome.tabs.sendMessage(tabs[0].id, { action: 'toggleSlop', enabled: message.enabled });
+            chrome.tabs.sendMessage(tabs[0].id, { action: 'toggleSlop', enabled: message.enabled })
+              .catch(error => console.log('Content script not ready:', error));
           }
         });
         sendResponse({ success: true });
@@ -79,13 +77,9 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   return true;
 });
 
-
 async function updateIcon(enabled: boolean): Promise<void> {
   try {
-    // Update icon based on state
-    const iconSet = enabled ? ICONS.ENABLED : ICONS.DISABLED;
-    await chrome.action.setIcon({ path: iconSet });
-
+    // Icon switching disabled until proper icons are available
     const title = enabled ? 'Slop Block: ON (click to disable)' : 'Slop Block: OFF (click to enable)';
     await chrome.action.setTitle({ title });
     
@@ -94,7 +88,6 @@ async function updateIcon(enabled: boolean): Promise<void> {
     console.error('Failed to update icon:', error);
   }
 }
-
 
 async function updateBadge(enabled: boolean, tabId?: number, count?: number): Promise<void> {
   try {
@@ -116,12 +109,10 @@ async function updateBadge(enabled: boolean, tabId?: number, count?: number): Pr
   }
 }
 
-
 function isTwitterTab(url?: string): boolean {
   if (!url) return false;
   return url.includes('twitter.com') || url.includes('x.com');
 }
-
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && isTwitterTab(tab.url)) {

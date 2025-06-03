@@ -7,48 +7,33 @@ export interface SlopDetectionResult {
 }
 
 export const regexRules: RegExp[] = [
-  // Three-step narrative hooks
   /at first.*then.*but eventually/i,
   /first.*then.*finally/i,
   /started.*then.*now/i,
-  
-  // List-based content patterns
   /people buy from people who:/i,
   /want to \w+\? here's how/i,
   /you don't need:.*you need:/i,
   /here's what \w+ taught me:/i,
-  
-  // Sensational hooks with numbers
   /\d{3,}.*here's how/i,
   /\d{3,}.*here's the/i,
   /\$\d{1,3}k.*in \d+ days/i,
   /\d+\s*million.*here's/i,
-  
-  // Common mantras and formulas
   /volume wins on \w+/i,
   /the answer is more/i,
   /consistency beats perfection/i,
   /growth is simply.*\d+%.*\d+%/i,
   /success is \d+%.*\d+%/i,
-  
-  // Failure-to-success metrics
   /went from \$?\d+.*to \$?\d+/i,
   /\d+\s*(downloads|users|followers)/i,
   /made \$\d+.*in \d+ months/i,
   /from zero to \$\d+/i,
-  
-  // Tough-love imperatives
   /stop \w+ing everything/i,
   /stop making excuses/i,
   /you're overthinking/i,
   /quit complaining/i,
-  
-  // Virtue signaling lists
   /you can be a \w+ & still:/i,
   /successful people don't:/i,
   /millionaires do this:/i,
-  
-  // Generic motivation
   /your future self will thank you/i,
   /isn't coming to save you/i,
   /bet on yourself/i
@@ -68,7 +53,6 @@ export function detectSlopAdvanced(tweetText: string, metadata: TweetMetadata): 
   const reasons: string[] = [];
   let confidence = 0;
   
-  // Apply regex pattern matching
   regexRules.forEach((pattern, index) => {
     if (pattern.test(tweetText)) {
       reasons.push(`Matched slop pattern ${index + 1}`);
@@ -76,7 +60,6 @@ export function detectSlopAdvanced(tweetText: string, metadata: TweetMetadata): 
     }
   });
   
-  // Apply numeric rules
   const emojiCount = (tweetText.match(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]/gu) || []).length;
   const lineBreakCount = (tweetText.match(/\n/g) || []).length;
   
@@ -90,7 +73,6 @@ export function detectSlopAdvanced(tweetText: string, metadata: TweetMetadata): 
     confidence += 0.3;
   }
   
-  // Legacy checks
   if (tweetText.toLowerCase().includes('ai generated')) {
     reasons.push('Contains "AI generated" phrase');
     confidence += 0.8;

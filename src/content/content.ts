@@ -1,41 +1,39 @@
-import { findTweetElements, applyTweetEffect, removeTweetEffect, throttle, debounce, TweetElement } from '../utils/dom';
+import { findTweetElements, applyTweetEffect, removeTweetEffect, throttle, debounce, TweetElement, setDebugMode, replaceWithHiddenMessage, addDebugHighlight } from '../utils/dom';
 import { getStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '../utils/storage';
 import { isSlop, isWhitelisted } from '../rules/rules';
 
-// Global observer variable
+// Extension state variables
 let observer: MutationObserver | null = null;
-
-// Extension state
 let isEnabled = false;
 let blurMode = true;
+let debugModeEnabled = false;
 let userWhitelist: string[] = [];
 let processedTweets = new Set<Element>();
 
-/**
- * Initialize the content script
- */
 async function initialize(): Promise<void> {
   console.log('Slop Block content script initializing...');
   
   try {
-    // Get initial state from background
     const response = await chrome.runtime.sendMessage({ action: 'getState' });
     if (response) {
       isEnabled = response.enabled;
       blurMode = response.blurMode;
     }
     
-    // Get user whitelist
     userWhitelist = await getStorageValue(STORAGE_KEYS.USER_WHITELIST, DEFAULT_VALUES[STORAGE_KEYS.USER_WHITELIST]);
     
-    console.log(`Slop Block initialized: enabled=${isEnabled}, blurMode=${blurMode}`);
+    // Enable debug mode if in development (check for localhost or specific debug parameter)
+    debugModeEnabled = location.hostname === 'localhost' || 
+                       new URLSearchParams(location.search).has('slopDebug') ||
+                       location.hash.includes('slopDebug');
+    setDebugMode(debugModeEnabled);
     
-    // Start observing if enabled
+    console.log(`Slop Block initialized: enabled=${isEnabled}, blurMode=${blurMode}, debug=${debugModeEnabled}`);
+    
     if (isEnabled) {
       startObserving();
     }
     
-    // Process existing tweets
     processExistingTweets();
     
   } catch (error) {
@@ -68,9 +66,6 @@ function startObserving(): void {
   console.log('DOM observer started');
 }
 
-/**
- * Stop observing DOM changes
- */
 function stopObserving(): void {
   if (observer) {
     observer.disconnect();
@@ -79,9 +74,6 @@ function stopObserving(): void {
   console.log('DOM observer stopped');
 }
 
-/**
- * Process existing tweets on the page
- */
 const processExistingTweets = debounce((): void => {
   if (!isEnabled) return;
   
@@ -89,35 +81,37 @@ const processExistingTweets = debounce((): void => {
   processTweetsInNode(document.body);
 }, 200);
 
-/**
- * Process tweets in a given DOM node
- */
 function processTweetsInNode(node: Element): void {
   const tweets = findTweetElements(node);
   tweets.forEach(tweet => processTweet(tweet));
 }
 
-/**
- * Process a single tweet
- */
 function processTweet(tweet: TweetElement): void {
-  // Skip if already processed
   if (processedTweets.has(tweet.element)) {
     return;
   }
   
   try {
-    // Check if user is whitelisted
+    // Debug: Log tweet processing
+    if (debugModeEnabled) {
+      console.log('Processing tweet:', {
+        textLength: tweet.textContent.length,
+        textPreview: tweet.textContent.substring(0, 100),
+        username: tweet.metadata.username,
+        element: tweet.element
+      });
+    }
+    
     if (tweet.metadata.username && isWhitelisted(tweet.metadata.username, userWhitelist)) {
+      addDebugHighlight(tweet.element, false);
       processedTweets.add(tweet.element);
       return;
     }
     
-    // Run slop detection
     const isSlopContent = isSlop(tweet.textContent, tweet.metadata);
     
     if (isSlopContent) {
-      console.log('Slop detected:', {
+      console.log('🚨 Slop detected:', {
         text: tweet.textContent.substring(0, 100) + '...',
         username: tweet.metadata.username,
         engagement: {
@@ -127,26 +121,34 @@ function processTweet(tweet: TweetElement): void {
         }
       });
       
-      // Apply visual effect
-      const effect = blurMode ? 'blur' : 'hide';
-      applyTweetEffect(tweet.element, effect);
+      // Use content replacement instead of just CSS effects
+      if (blurMode) {
+        // Old blur effect as fallback
+        applyTweetEffect(tweet.element, 'blur');
+      } else {
+        // New content replacement
+        replaceWithHiddenMessage(tweet.element);
+      }
       
-      // Update detection count
-      chrome.runtime.sendMessage({ action: 'updateCount', count: 1 });
+      addDebugHighlight(tweet.element, true);
+      
+      chrome.runtime.sendMessage({ action: 'updateCount', count: 1 })
+        .catch(error => console.log('Background script not ready:', error));
     } else {
-      // Ensure no effects are applied
       removeTweetEffect(tweet.element);
+      addDebugHighlight(tweet.element, false);
     }
     
     processedTweets.add(tweet.element);
   } catch (error) {
     console.error('Error processing tweet:', error);
+    if (debugModeEnabled) {
+      console.error('Tweet element:', tweet.element);
+      console.error('Tweet text:', tweet.textContent);
+    }
   }
 }
 
-/**
- * Clear all effects from processed tweets
- */
 function clearAllEffects(): void {
   processedTweets.forEach(element => {
     removeTweetEffect(element);
@@ -155,9 +157,7 @@ function clearAllEffects(): void {
   console.log('All tweet effects cleared');
 }
 
-/**
- * Handle messages from background script
- */
+// Handle messages from background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Content script received message:', message);
   
@@ -179,7 +179,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.blurMode !== undefined) {
         blurMode = message.blurMode;
         if (isEnabled) {
-          // Reprocess all tweets with new mode
           clearAllEffects();
           processExistingTweets();
         }
@@ -187,7 +186,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.whitelist !== undefined) {
         userWhitelist = message.whitelist;
         if (isEnabled) {
-          // Reprocess all tweets with new whitelist
           clearAllEffects();
           processExistingTweets();
         }
@@ -199,26 +197,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   
   sendResponse({ success: true });
+  return true;
 });
 
-// Initialize when DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initialize);
 } else {
   initialize();
 }
 
-// Handle page navigation (Twitter/X is a SPA)
+// Handle SPA navigation
 let currentUrl = location.href;
 new MutationObserver(() => {
   if (location.href !== currentUrl) {
     currentUrl = location.href;
     console.log('Page navigation detected, reinitializing...');
     
-    // Clear processed tweets cache
     processedTweets.clear();
     
-    // Reinitialize after a brief delay to let the page load
     setTimeout(() => {
       if (isEnabled) {
         processExistingTweets();

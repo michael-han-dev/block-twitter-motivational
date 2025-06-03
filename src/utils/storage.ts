@@ -1,5 +1,3 @@
-
-
 export async function getStorageValue<T>(key: string, defaultValue: T): Promise<T> {
   try {
     const result = await chrome.storage.sync.get({ [key]: defaultValue });
