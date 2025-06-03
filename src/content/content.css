@@ -1,0 +1,53 @@
+/**
+ * Slop Block Extension - Content Styles
+ * CSS utilities for hiding and blurring detected slop content
+ */
+
+.slop-hidden {
+  display: none !important;
+}
+
+.slop-blurred {
+  filter: blur(5px) !important;
+  opacity: 0.3 !important;
+  transition: filter 0.3s ease, opacity 0.3s ease !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+.slop-blurred:hover {
+  filter: blur(1px) !important;
+  opacity: 0.7 !important;
+  pointer-events: auto !important;
+}
+
+/* Optional: Add a subtle border to indicate processed content */
+.slop-blurred {
+  border: 1px solid rgba(255, 0, 0, 0.1) !important;
+  border-radius: 8px !important;
+}
+
+/* Ensure transitions work smoothly with Twitter's existing styles */
+[data-testid="tweet"].slop-blurred,
+[data-testid="tweet"].slop-hidden {
+  will-change: filter, opacity !important;
+}
+
+/* For debugging: highlight detected tweets in development */
+.slop-debug {
+  outline: 2px dashed orange !important;
+  outline-offset: 2px !important;
+}
+
+/* Ensure icons and interactive elements are properly handled */
+.slop-blurred button,
+.slop-blurred a,
+.slop-blurred [role="button"] {
+  pointer-events: none !important;
+}
+
+.slop-blurred:hover button,
+.slop-blurred:hover a,
+.slop-blurred:hover [role="button"] {
+  pointer-events: auto !important;
+} 

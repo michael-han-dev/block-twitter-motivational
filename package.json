@@ -1,0 +1,25 @@
+{
+  "name": "slop-block-extension",
+  "version": "1.0.0",
+  "description": "Chrome extension to hide or blur low-quality AI-generated tweets",
+  "main": "dist/background.js",
+  "scripts": {
+    "dev": "node esbuild.config.js --dev",
+    "build": "node esbuild.config.js",
+    "watch": "node esbuild.config.js --watch",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "chrome-extension",
+    "twitter",
+    "content-filter"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/chrome": "^0.0.258",
+    "esbuild": "^0.25.5",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.3.3"
+  }
+}
