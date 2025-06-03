@@ -39,7 +39,7 @@
   outline-offset: 2px !important;
 }
 
-/* Ensure icons and interactive elements are properly handled */
+/* Ensure interactive elements are properly handled */
 .slop-blurred button,
 .slop-blurred a,
 .slop-blurred [role="button"] {

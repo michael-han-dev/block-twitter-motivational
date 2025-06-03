@@ -110,7 +110,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     }
   } catch (error) {
     console.error('Error handling message:', error);
-    sendResponse({ error: error.message });
+    sendResponse({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
   
   return true; // Keep message channel open for async response

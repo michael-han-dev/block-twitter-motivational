@@ -30,7 +30,6 @@ export function isSlop(tweetText: string, metadata: TweetMetadata): boolean {
  */
 export function detectSlopAdvanced(tweetText: string, metadata: TweetMetadata): SlopDetectionResult {
   // TODO: Insert actual heuristics patterns here
-  // This is a placeholder implementation
   
   const reasons: string[] = [];
   let confidence = 0;
@@ -46,18 +45,16 @@ export function detectSlopAdvanced(tweetText: string, metadata: TweetMetadata): 
     confidence += 0.9;
   }
   
-  // Very basic engagement ratio check (placeholder)
   const totalEngagement = metadata.likes + metadata.retweets + metadata.replies;
   if (totalEngagement === 0 && tweetText.length > 200) {
     reasons.push('Long tweet with no engagement');
     confidence += 0.3;
   }
   
-  // Normalize confidence to 0-1 range
   confidence = Math.min(confidence, 1.0);
   
   return {
-    isSlop: confidence > 0.5, // Threshold for classification
+    isSlop: confidence > 0.5,
     confidence,
     reasons
   };
