@@ -1,8 +1,3 @@
-/**
- * Heuristics engine for detecting AI-generated "slop" content
- * This is a placeholder implementation - actual rules will be provided later
- */
-
 import { TweetMetadata } from '../utils/dom';
 
 export interface SlopDetectionResult {
@@ -11,27 +6,91 @@ export interface SlopDetectionResult {
   reasons: string[];
 }
 
-/**
- * Main slop detection function
- * @param tweetText The text content of the tweet
- * @param metadata Tweet engagement and account metadata
- * @returns Boolean indicating if tweet is likely slop
- */
+export const regexRules: RegExp[] = [
+  // Three-step narrative hooks
+  /at first.*then.*but eventually/i,
+  /first.*then.*finally/i,
+  /started.*then.*now/i,
+  
+  // List-based content patterns
+  /people buy from people who:/i,
+  /want to \w+\? here's how/i,
+  /you don't need:.*you need:/i,
+  /here's what \w+ taught me:/i,
+  
+  // Sensational hooks with numbers
+  /\d{3,}.*here's how/i,
+  /\d{3,}.*here's the/i,
+  /\$\d{1,3}k.*in \d+ days/i,
+  /\d+\s*million.*here's/i,
+  
+  // Common mantras and formulas
+  /volume wins on \w+/i,
+  /the answer is more/i,
+  /consistency beats perfection/i,
+  /growth is simply.*\d+%.*\d+%/i,
+  /success is \d+%.*\d+%/i,
+  
+  // Failure-to-success metrics
+  /went from \$?\d+.*to \$?\d+/i,
+  /\d+\s*(downloads|users|followers)/i,
+  /made \$\d+.*in \d+ months/i,
+  /from zero to \$\d+/i,
+  
+  // Tough-love imperatives
+  /stop \w+ing everything/i,
+  /stop making excuses/i,
+  /you're overthinking/i,
+  /quit complaining/i,
+  
+  // Virtue signaling lists
+  /you can be a \w+ & still:/i,
+  /successful people don't:/i,
+  /millionaires do this:/i,
+  
+  // Generic motivation
+  /your future self will thank you/i,
+  /isn't coming to save you/i,
+  /bet on yourself/i
+];
+
+export const numericRules = {
+  maxEmojis: 3,
+  maxLineBreaks: 6
+};
+
 export function isSlop(tweetText: string, metadata: TweetMetadata): boolean {
   const result = detectSlopAdvanced(tweetText, metadata);
   return result.isSlop;
 }
 
-/**
- * Advanced slop detection with confidence scoring and reasons
- * @param tweetText The text content of the tweet
- * @param metadata Tweet engagement and account metadata
- * @returns Detailed detection result
- */
 export function detectSlopAdvanced(tweetText: string, metadata: TweetMetadata): SlopDetectionResult {
   const reasons: string[] = [];
   let confidence = 0;
   
+  // Apply regex pattern matching
+  regexRules.forEach((pattern, index) => {
+    if (pattern.test(tweetText)) {
+      reasons.push(`Matched slop pattern ${index + 1}`);
+      confidence += 0.4;
+    }
+  });
+  
+  // Apply numeric rules
+  const emojiCount = (tweetText.match(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]/gu) || []).length;
+  const lineBreakCount = (tweetText.match(/\n/g) || []).length;
+  
+  if (emojiCount > numericRules.maxEmojis) {
+    reasons.push(`Too many emojis: ${emojiCount}`);
+    confidence += 0.3;
+  }
+  
+  if (lineBreakCount > numericRules.maxLineBreaks) {
+    reasons.push(`Too many line breaks: ${lineBreakCount}`);
+    confidence += 0.3;
+  }
+  
+  // Legacy checks
   if (tweetText.toLowerCase().includes('ai generated')) {
     reasons.push('Contains "AI generated" phrase');
     confidence += 0.8;
@@ -51,18 +110,12 @@ export function detectSlopAdvanced(tweetText: string, metadata: TweetMetadata): 
   confidence = Math.min(confidence, 1.0);
   
   return {
-    isSlop: confidence > 0.5,
+    isSlop: confidence > 0.3,
     confidence,
     reasons
   };
 }
 
-/**
- * Check if a user should be whitelisted (never marked as slop)
- * @param username The username to check
- * @param userWhitelist Array of whitelisted usernames
- * @returns True if user is whitelisted
- */
 export function isWhitelisted(username: string, userWhitelist: string[]): boolean {
   if (!username || !userWhitelist.length) return false;
   
@@ -70,57 +123,4 @@ export function isWhitelisted(username: string, userWhitelist: string[]): boolea
   return userWhitelist.some(whitelisted => 
     whitelisted.toLowerCase() === normalizedUsername
   );
-}
-
-/**
- * Future: This is where actual regex patterns and ML models will be integrated
- * The API surface will remain the same to ensure compatibility
- */
-
-// Placeholder patterns - these will be replaced with real detection rules
-const PLACEHOLDER_PATTERNS = {
-  // AI self-identification patterns
-  AI_INDICATORS: [
-    /as an ai/i,
-    /i am an ai/i,
-    /ai generated/i,
-    /artificial intelligence/i
-  ],
-  
-  // Generic motivational patterns (very basic examples)
-  GENERIC_MOTIVATION: [
-    /believe in yourself/i,
-    /you can do it/i,
-    /never give up/i
-  ],
-  
-  // Engagement farming patterns
-  ENGAGEMENT_BAIT: [
-    /like if you agree/i,
-    /retweet if/i,
-    /comment below/i
-  ]
-};
-
-/**
- * Apply regex patterns to detect slop (placeholder implementation)
- */
-function applyPatterns(text: string): { matches: string[], score: number } {
-  const matches: string[] = [];
-  let score = 0;
-  
-  // Check each pattern category
-  Object.entries(PLACEHOLDER_PATTERNS).forEach(([category, patterns]) => {
-    patterns.forEach(pattern => {
-      if (pattern.test(text)) {
-        matches.push(category);
-        score += 0.3; // Each match adds to the score
-      }
-    });
-  });
-  
-  return { matches, score: Math.min(score, 1.0) };
-}
-
-// Export for testing and debugging
-export { PLACEHOLDER_PATTERNS, applyPatterns }; 
+} 

@@ -36,24 +36,22 @@ export function findTweetElements(node: Element): TweetElement[] {
   return tweets;
 }
 
-/**
- * Extract tweet data from a tweet element
- */
+
 function extractTweetData(element: Element): TweetElement | null {
   try {
-    // Extract text content
+
     const textElement = element.querySelector('[data-testid="tweetText"]');
     const textContent = textElement?.textContent?.trim() || '';
     
-    // Extract engagement metrics
+
     const likes = extractEngagementCount(element, 'like');
     const retweets = extractEngagementCount(element, 'retweet');
     const replies = extractEngagementCount(element, 'reply');
     
-    // Check if account is verified
+
     const isVerified = !!element.querySelector('[data-testid="icon-verified"]');
     
-    // Extract username
+
     const usernameElement = element.querySelector('[data-testid="User-Name"] a');
     const username = usernameElement?.textContent?.replace('@', '') || '';
     
@@ -123,9 +121,7 @@ function parseEngagementNumber(text: string): number {
   }
 }
 
-/**
- * Apply visual effects to a tweet element
- */
+
 export function applyTweetEffect(element: Element, effect: 'blur' | 'hide'): void {
   element.classList.remove('slop-blurred', 'slop-hidden');
   
@@ -136,16 +132,12 @@ export function applyTweetEffect(element: Element, effect: 'blur' | 'hide'): voi
   }
 }
 
-/**
- * Remove all visual effects from a tweet element
- */
+
 export function removeTweetEffect(element: Element): void {
   element.classList.remove('slop-blurred', 'slop-hidden');
 }
 
-/**
- * Throttle function to limit how often a function can be called
- */
+
 export function throttle<T extends (...args: any[]) => any>(
   func: T,
   limit: number
@@ -157,5 +149,16 @@ export function throttle<T extends (...args: any[]) => any>(
       inThrottle = true;
       setTimeout(() => inThrottle = false, limit);
     }
+  };
+}
+
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  let timeoutId: number;
+  return function(this: any, ...args: Parameters<T>) {
+    clearTimeout(timeoutId);
+    timeoutId = window.setTimeout(() => func.apply(this, args), delay);
   };
 } 

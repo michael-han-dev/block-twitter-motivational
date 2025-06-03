@@ -5,7 +5,6 @@ import { getStorageValue, setStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '
  * Handles toolbar toggle, state management, and icon updates
  */
 
-// Icon paths for different states
 const ICONS = {
   ENABLED: {
     16: 'icons/icon16.png',
@@ -14,20 +13,18 @@ const ICONS = {
     128: 'icons/icon128.png'
   },
   DISABLED: {
-    16: 'icons/icon16.png',
-    32: 'icons/icon32.png',
-    48: 'icons/icon32.png', 
-    128: 'icons/icon128.png'
+    16: 'icons/icon16-disabled.png',
+    32: 'icons/icon32-disabled.png',
+    48: 'icons/icon32-disabled.png', 
+    128: 'icons/icon128-disabled.png'
   }
 };
 
-/**
- * Handle extension installation and updates
- */
+
 chrome.runtime.onInstalled.addListener(async (details) => {
   console.log('Slop Block extension installed/updated:', details.reason);
   
-  // Initialize default settings
+
   if (details.reason === 'install') {
     await setStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);
     await setStorageValue(STORAGE_KEYS.BLUR_MODE, DEFAULT_VALUES[STORAGE_KEYS.BLUR_MODE]);
@@ -35,14 +32,11 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     await setStorageValue(STORAGE_KEYS.USER_WHITELIST, DEFAULT_VALUES[STORAGE_KEYS.USER_WHITELIST]);
   }
   
-  // Set initial icon state
+
   const isEnabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);
   await updateIcon(isEnabled);
 });
 
-/**
- * Handle messages from content scripts
- */
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   try {
     switch (message.action) {
@@ -85,12 +79,13 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   return true;
 });
 
-/**
- * Update extension icon based on state
- */
+
 async function updateIcon(enabled: boolean): Promise<void> {
   try {
-    // Skip icon update to avoid PNG decode error
+    // Update icon based on state
+    const iconSet = enabled ? ICONS.ENABLED : ICONS.DISABLED;
+    await chrome.action.setIcon({ path: iconSet });
+
     const title = enabled ? 'Slop Block: ON (click to disable)' : 'Slop Block: OFF (click to enable)';
     await chrome.action.setTitle({ title });
     
@@ -100,9 +95,7 @@ async function updateIcon(enabled: boolean): Promise<void> {
   }
 }
 
-/**
- * Update extension badge
- */
+
 async function updateBadge(enabled: boolean, tabId?: number, count?: number): Promise<void> {
   try {
     if (!enabled) {
@@ -123,17 +116,13 @@ async function updateBadge(enabled: boolean, tabId?: number, count?: number): Pr
   }
 }
 
-/**
- * Check if a URL is a Twitter/X page
- */
+
 function isTwitterTab(url?: string): boolean {
   if (!url) return false;
   return url.includes('twitter.com') || url.includes('x.com');
 }
 
-/**
- * Handle tab updates to refresh badge
- */
+
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && isTwitterTab(tab.url)) {
     const isEnabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);

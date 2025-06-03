@@ -1,6 +1,9 @@
-import { findTweetElements, applyTweetEffect, removeTweetEffect, throttle, TweetElement } from '../utils/dom';
+import { findTweetElements, applyTweetEffect, removeTweetEffect, throttle, debounce, TweetElement } from '../utils/dom';
 import { getStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '../utils/storage';
 import { isSlop, isWhitelisted } from '../rules/rules';
+
+// Global observer variable
+let observer: MutationObserver | null = null;
 
 // Extension state
 let isEnabled = false;
@@ -79,12 +82,12 @@ function stopObserving(): void {
 /**
  * Process existing tweets on the page
  */
-function processExistingTweets(): void {
+const processExistingTweets = debounce((): void => {
   if (!isEnabled) return;
   
   console.log('Processing existing tweets...');
   processTweetsInNode(document.body);
-}
+}, 200);
 
 /**
  * Process tweets in a given DOM node
@@ -197,9 +200,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   sendResponse({ success: true });
 });
-
-// Global observer variable
-let observer: MutationObserver | null = null;
 
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {

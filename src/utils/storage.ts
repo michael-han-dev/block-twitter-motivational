@@ -1,6 +1,4 @@
-/**
- * Chrome Storage utilities for the Slop Block extension
- */
+
 
 export async function getStorageValue<T>(key: string, defaultValue: T): Promise<T> {
   try {
