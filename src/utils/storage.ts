@@ -28,12 +28,11 @@ export async function removeStorageValue(key: string): Promise<void> {
   }
 }
 
-// Extension-specific storage keys and defaults
 export const STORAGE_KEYS = {
   SLOP_BLOCK_ENABLED: 'slopBlockEnabled',
   DETECTION_COUNT: 'detectionCount',
   USER_WHITELIST: 'userWhitelist',
-  BLUR_MODE: 'blurMode' // true for blur, false for hide
+  BLUR_MODE: 'blurMode'
 } as const;
 
 export const DEFAULT_VALUES = {

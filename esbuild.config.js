@@ -5,42 +5,32 @@ const path = require('path');
 const isWatch = process.argv.includes('--watch');
 const isDev = process.argv.includes('--dev');
 
-// Ensure dist directory exists
 if (!fs.existsSync('dist')) {
   fs.mkdirSync('dist');
 }
 
-// Copy static files
 function copyStaticFiles() {
-  // Copy manifest.json
   if (fs.existsSync('src/manifest.json')) {
     fs.copyFileSync('src/manifest.json', 'dist/manifest.json');
   } else if (fs.existsSync('manifest.json')) {
     fs.copyFileSync('manifest.json', 'dist/manifest.json');
   }
   
-  // Copy CSS files
   if (fs.existsSync('src/content/content.css')) {
     fs.copyFileSync('src/content/content.css', 'dist/content.css');
   }
   
-  // Copy icons
-  if (fs.existsSync('assets/icons')) {
-    if (!fs.existsSync('dist/icons')) {
-      fs.mkdirSync('dist/icons');
-    }
-    const icons = fs.readdirSync('assets/icons');
-    icons.forEach(icon => {
-      fs.copyFileSync(`assets/icons/${icon}`, `dist/icons/${icon}`);
-    });
+  if (fs.existsSync('src/popup/popup.html')) {
+    fs.copyFileSync('src/popup/popup.html', 'dist/popup.html');
   }
 }
 
 const buildOptions = {
-  entryPoints: [
-    'src/background/background.ts',
-    'src/content/content.ts'
-  ],
+  entryPoints: {
+    'background': 'src/background/background.ts',
+    'content': 'src/content/content.ts',
+    'popup': 'src/popup/popup.ts'
+  },
   bundle: true,
   outdir: 'dist',
   platform: 'browser',

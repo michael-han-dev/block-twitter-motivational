@@ -1,8 +1,3 @@
-/**
- * Content script for Slop Block extension
- * Runs on Twitter/X pages to detect and hide/blur slop content
- */
-
 import { findTweetElements, applyTweetEffect, removeTweetEffect, throttle, TweetElement } from '../utils/dom';
 import { getStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '../utils/storage';
 import { isSlop, isWhitelisted } from '../rules/rules';
@@ -45,19 +40,16 @@ async function initialize(): Promise<void> {
   }
 }
 
-/**
- * Start observing DOM changes for new tweets
- */
 function startObserving(): void {
   if (observer) {
     observer.disconnect();
   }
   
-  observer = new MutationObserver(throttle((mutations) => {
+  observer = new MutationObserver(throttle((mutations: MutationRecord[]) => {
     if (!isEnabled) return;
     
-    mutations.forEach(mutation => {
-      mutation.addedNodes.forEach(node => {
+    mutations.forEach((mutation: MutationRecord) => {
+      mutation.addedNodes.forEach((node: Node) => {
         if (node.nodeType === Node.ELEMENT_NODE) {
           processTweetsInNode(node as Element);
         }

@@ -1,9 +1,9 @@
+import { getStorageValue, setStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '../utils/storage';
+
 /**
  * Background service worker for Slop Block extension
  * Handles toolbar toggle, state management, and icon updates
  */
-
-import { getStorageValue, setStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '../utils/storage';
 
 // Icon paths for different states
 const ICONS = {
@@ -14,7 +14,7 @@ const ICONS = {
     128: 'icons/icon128.png'
   },
   DISABLED: {
-    16: 'icons/icon16.png', // Same icons for now, could be different
+    16: 'icons/icon16.png',
     32: 'icons/icon32.png',
     48: 'icons/icon32.png', 
     128: 'icons/icon128.png'
@@ -41,45 +41,6 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 });
 
 /**
- * Handle toolbar button clicks
- */
-chrome.action.onClicked.addListener(async (tab) => {
-  try {
-    console.log('Extension icon clicked for tab:', tab.id);
-    
-    // Get current state
-    const isEnabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);
-    const newState = !isEnabled;
-    
-    // Update storage
-    await setStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, newState);
-    
-    // Update icon
-    await updateIcon(newState);
-    
-    // Notify content script if tab is Twitter/X
-    if (tab.id && isTwitterTab(tab.url)) {
-      try {
-        await chrome.tabs.sendMessage(tab.id, {
-          action: 'toggleSlop',
-          enabled: newState
-        });
-        console.log(`Extension ${newState ? 'enabled' : 'disabled'} for tab ${tab.id}`);
-      } catch (error) {
-        console.warn('Failed to send message to content script:', error);
-        // Content script might not be ready yet, that's okay
-      }
-    }
-    
-    // Update badge to show state
-    await updateBadge(newState, tab.id);
-    
-  } catch (error) {
-    console.error('Error handling action click:', error);
-  }
-});
-
-/**
  * Handle messages from content scripts
  */
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
@@ -88,10 +49,17 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       case 'getState':
         const isEnabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);
         const blurMode = await getStorageValue(STORAGE_KEYS.BLUR_MODE, DEFAULT_VALUES[STORAGE_KEYS.BLUR_MODE]);
-        sendResponse({
-          enabled: isEnabled,
-          blurMode: blurMode
+        sendResponse({ enabled: isEnabled, blurMode: blurMode });
+        break;
+        
+      case 'stateChanged':
+        await updateIcon(message.enabled);
+        chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+          if (tabs[0]?.id) {
+            chrome.tabs.sendMessage(tabs[0].id, { action: 'toggleSlop', enabled: message.enabled });
+          }
         });
+        sendResponse({ success: true });
         break;
         
       case 'updateCount':
@@ -99,21 +67,22 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         const newCount = currentCount + (message.count || 1);
         await setStorageValue(STORAGE_KEYS.DETECTION_COUNT, newCount);
         
-        // Update badge with detection count
         if (sender.tab?.id) {
           await updateBadge(true, sender.tab.id, newCount);
         }
+        sendResponse({ success: true });
         break;
         
       default:
         console.warn('Unknown message action:', message.action);
+        sendResponse({ error: 'Unknown action' });
     }
   } catch (error) {
     console.error('Error handling message:', error);
     sendResponse({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
   
-  return true; // Keep message channel open for async response
+  return true;
 });
 
 /**
@@ -121,9 +90,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
  */
 async function updateIcon(enabled: boolean): Promise<void> {
   try {
-    const iconSet = enabled ? ICONS.ENABLED : ICONS.DISABLED;
-    await chrome.action.setIcon({ path: iconSet });
-    
+    // Skip icon update to avoid PNG decode error
     const title = enabled ? 'Slop Block: ON (click to disable)' : 'Slop Block: OFF (click to enable)';
     await chrome.action.setTitle({ title });
     

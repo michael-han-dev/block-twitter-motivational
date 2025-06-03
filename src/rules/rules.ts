@@ -29,12 +29,9 @@ export function isSlop(tweetText: string, metadata: TweetMetadata): boolean {
  * @returns Detailed detection result
  */
 export function detectSlopAdvanced(tweetText: string, metadata: TweetMetadata): SlopDetectionResult {
-  // TODO: Insert actual heuristics patterns here
-  
   const reasons: string[] = [];
   let confidence = 0;
   
-  // Placeholder heuristics for testing
   if (tweetText.toLowerCase().includes('ai generated')) {
     reasons.push('Contains "AI generated" phrase');
     confidence += 0.8;
