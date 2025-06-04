@@ -11,17 +11,17 @@ let userWhitelist: string[] = [];
 let processedTweets = new Set<Element>();
 
 chrome.storage.onChanged.addListener(async (changes, area) => {
-  console.log('🔄 Storage change detected:', { area, changes });
+  if (debugModeEnabled) {
+    console.log('🔄 Storage change detected:', { area, changes });
+  }
   
   if (area === 'sync') {
     if (changes[STORAGE_KEYS.SLOP_BLOCK_ENABLED]) {
-      const oldValue = changes[STORAGE_KEYS.SLOP_BLOCK_ENABLED].oldValue;
       const newEnabled = changes[STORAGE_KEYS.SLOP_BLOCK_ENABLED].newValue;
-      console.log(`📱 Toggle state change: ${oldValue} → ${newEnabled}`);
       
       if (newEnabled !== isEnabled) {
         isEnabled = newEnabled;
-        console.log(`✅ Extension ${isEnabled ? 'ENABLED' : 'DISABLED'} via storage change`);
+        console.log(`Extension ${isEnabled ? 'ENABLED' : 'DISABLED'}`);
         
         if (isEnabled) {
           startObserving();
@@ -35,7 +35,6 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
     
     if (changes[STORAGE_KEYS.BLUR_MODE]) {
       const newBlurMode = changes[STORAGE_KEYS.BLUR_MODE].newValue;
-      console.log(`🎨 Blur mode change: ${blurMode} → ${newBlurMode}`);
       if (newBlurMode !== blurMode) {
         blurMode = newBlurMode;
         if (isEnabled) {
@@ -47,7 +46,6 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
     
     if (changes[STORAGE_KEYS.USER_WHITELIST]) {
       const newWhitelist = changes[STORAGE_KEYS.USER_WHITELIST].newValue;
-      console.log(`📝 Whitelist change:`, newWhitelist);
       userWhitelist = newWhitelist;
       if (isEnabled) {
         clearAllEffects();
@@ -58,38 +56,28 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
 });
 
 async function initialize(): Promise<void> {
-  console.log('🚀 Slop Block content script initializing...');
-  
   try {
-    console.log('📖 Reading initial storage values...');
     isEnabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);
     blurMode = await getStorageValue(STORAGE_KEYS.BLUR_MODE, DEFAULT_VALUES[STORAGE_KEYS.BLUR_MODE]);
     userWhitelist = await getStorageValue(STORAGE_KEYS.USER_WHITELIST, DEFAULT_VALUES[STORAGE_KEYS.USER_WHITELIST]);
     
-    console.log('📊 Initial state:', { isEnabled, blurMode, whitelistLength: userWhitelist.length });
-    
-    debugModeEnabled = location.hostname === 'localhost' || 
-                       new URLSearchParams(location.search).has('slopDebug') ||
-                       location.hash === '#slopDebug';
+    debugModeEnabled = location.hash === '#slopDebug';
     setDebugMode(debugModeEnabled);
     
     if (debugModeEnabled) {
       console.log('🔧 DEBUG MODE ENABLED - Verbose logging active');
+      console.log('📊 Initial state:', { isEnabled, blurMode, whitelistLength: userWhitelist.length });
     }
     
-    console.log(`✅ Slop Block initialized: enabled=${isEnabled}, blurMode=${blurMode}, debug=${debugModeEnabled}`);
+    console.log(`Slop Block initialized: ${isEnabled ? 'enabled' : 'disabled'}`);
     
     if (isEnabled) {
-      console.log('👀 Starting DOM observation...');
       startObserving();
-      console.log('🔍 Processing existing tweets...');
       processExistingTweets();
-    } else {
-      console.log('😴 Extension disabled - skipping DOM observation');
     }
     
   } catch (error) {
-    console.error('❌ Failed to initialize Slop Block:', error);
+    console.error('Failed to initialize Slop Block:', error);
   }
 }
 
@@ -102,10 +90,7 @@ function startObserving(): void {
   let pendingNodes: Element[] = [];
   
   observer = new MutationObserver((mutations: MutationRecord[]) => {
-    if (!isEnabled) {
-      console.log('⚠️ Observer triggered but extension disabled');
-      return;
-    }
+    if (!isEnabled) return;
     
     // Collect all added nodes from mutations
     mutations.forEach((mutation: MutationRecord) => {
@@ -123,7 +108,9 @@ function startObserving(): void {
     
     processingTimeout = setTimeout(() => {
       if (pendingNodes.length > 0) {
-        console.log(`🔄 Batch processing ${pendingNodes.length} DOM changes`);
+        if (debugModeEnabled) {
+          console.log(`🔄 Batch processing ${pendingNodes.length} DOM changes`);
+        }
         
         // Process all pending nodes at once
         pendingNodes.forEach(node => processTweetsInNode(node));
@@ -137,7 +124,9 @@ function startObserving(): void {
     subtree: true
   });
   
-  console.log('👁️ DOM observer started with batching');
+  if (debugModeEnabled) {
+    console.log('👁️ DOM observer started with batching');
+  }
 }
 
 function stopObserving(): void {
@@ -145,29 +134,29 @@ function stopObserving(): void {
     observer.disconnect();
     observer = null;
   }
-  console.log('DOM observer stopped');
+  if (debugModeEnabled) {
+    console.log('DOM observer stopped');
+  }
 }
 
 const processExistingTweets = debounce((): void => {
-  if (!isEnabled) {
-    console.log('⚠️ processExistingTweets called but extension disabled');
-    return;
-  }
+  if (!isEnabled) return;
   
   // Wait for Twitter to load tweets before processing
   const checkForTweets = () => {
-    console.log('🔍 Checking for existing tweets...');
-    const startTime = performance.now();
-    
     const tweetCount = document.querySelectorAll('[data-testid="tweet"]').length;
-    console.log(`📊 Found ${tweetCount} tweet elements in DOM`);
+    
+    if (debugModeEnabled) {
+      console.log(`🔍 Found ${tweetCount} tweet elements in DOM`);
+    }
     
     if (tweetCount > 0) {
+      const startTime = performance.now();
       processTweetsInNode(document.body);
-      const endTime = performance.now();
-      console.log(`⏱️ Tweet processing completed in ${(endTime - startTime).toFixed(2)}ms`);
-    } else {
-      console.log('⏳ No tweets found yet, will retry when DOM changes');
+      if (debugModeEnabled) {
+        const endTime = performance.now();
+        console.log(`⏱️ Tweet processing completed in ${(endTime - startTime).toFixed(2)}ms`);
+      }
     }
   };
   
@@ -205,57 +194,61 @@ function processTweetsInNode(node: Element): void {
 
 function processTweet(tweet: TweetElement): void {
   if (processedTweets.has(tweet.element)) {
-    console.log('⏭️ Tweet already processed, skipping');
     return;
   }
   
   try {
-    console.log('📝 Tweet details:', {
-      textLength: tweet.textContent.length,
-      textPreview: tweet.textContent.substring(0, 50) + (tweet.textContent.length > 50 ? '...' : ''),
-      username: tweet.metadata.username,
-      hasElement: !!tweet.element
-    });
+    if (debugModeEnabled) {
+      console.log('📝 Tweet details:', {
+        textLength: tweet.textContent.length,
+        textPreview: tweet.textContent.substring(0, 50) + (tweet.textContent.length > 50 ? '...' : ''),
+        username: tweet.metadata.username
+      });
+    }
     
     if (tweet.metadata.username && isWhitelisted(tweet.metadata.username, userWhitelist)) {
-      console.log(`✅ User "${tweet.metadata.username}" is whitelisted, skipping`);
+      if (debugModeEnabled) {
+        console.log(`✅ User "${tweet.metadata.username}" is whitelisted, skipping`);
+      }
       addDebugHighlight(tweet.element, false);
       processedTweets.add(tweet.element);
       return;
     }
     
-    console.log('🤖 Running slop detection...');
     const isSlopContent = isSlop(tweet.textContent, tweet.metadata);
-    console.log(`🎯 Slop detection result: ${isSlopContent ? 'SLOP DETECTED' : 'NOT SLOP'}`);
     
     if (isSlopContent) {
-      console.log('🚨 SLOP DETECTED - Applying effects:', {
-        text: tweet.textContent.substring(0, 100) + '...',
-        username: tweet.metadata.username,
-        engagement: {
-          likes: tweet.metadata.likes,
-          retweets: tweet.metadata.retweets,
-          replies: tweet.metadata.replies
-        }
-      });
+      console.log('🚨 AI content detected and collapsed');
+      if (debugModeEnabled) {
+        console.log('📊 Details:', {
+          text: tweet.textContent.substring(0, 100) + '...',
+          username: tweet.metadata.username,
+          engagement: {
+            likes: tweet.metadata.likes,
+            retweets: tweet.metadata.retweets,
+            replies: tweet.metadata.replies
+          }
+        });
+      }
       
-      console.log('📦 Applying collapse effect');
       applyTweetEffect(tweet.element, 'hide'); // Effect type doesn't matter, always collapses
-      
       addDebugHighlight(tweet.element, true);
-      
       safeRuntimeMessage({ action: 'updateCount', count: 1 });
     } else {
-      console.log('✅ Tweet is not slop, removing any effects');
       removeTweetEffect(tweet.element);
       addDebugHighlight(tweet.element, false);
     }
     
     processedTweets.add(tweet.element);
-    console.log(`📊 Total processed tweets: ${processedTweets.size}`);
+    
+    if (debugModeEnabled) {
+      console.log(`📊 Total processed tweets: ${processedTweets.size}`);
+    }
   } catch (error) {
-    console.error('❌ Error processing tweet:', error);
-    console.error('🐛 Tweet data:', { element: tweet.element, text: tweet.textContent });
+    console.error('Error processing tweet:', error);
+    if (debugModeEnabled) {
+      console.error('Tweet data:', { element: tweet.element, text: tweet.textContent });
+    }
   }
 }
 
@@ -264,7 +257,9 @@ function clearAllEffects(): void {
     removeTweetEffect(element);
   });
   processedTweets.clear();
-  console.log('All tweet effects cleared');
+  if (debugModeEnabled) {
+    console.log('All tweet effects cleared');
+  }
 }
 
 function isExtensionContextValid(): boolean {
@@ -277,7 +272,9 @@ function isExtensionContextValid(): boolean {
 
 function safeRuntimeMessage(message: any): void {
   if (!isExtensionContextValid()) {
-    console.log('⚠️ Extension context invalid, skipping runtime message');
+    if (debugModeEnabled) {
+      console.log('⚠️ Extension context invalid, skipping runtime message');
+    }
     return;
   }
   
@@ -292,12 +289,14 @@ function safeRuntimeMessage(message: any): void {
 
 // Handle messages from background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('Content script received message:', message);
+  if (debugModeEnabled) {
+    console.log('Content script received message:', message);
+  }
   
   switch (message.action) {
     case 'toggleSlop':
       isEnabled = message.enabled;
-      console.log(`✅ Extension ${isEnabled ? 'ENABLED' : 'DISABLED'} via message`);
+      console.log(`Extension ${isEnabled ? 'ENABLED' : 'DISABLED'} via message`);
       
       if (isEnabled) {
         startObserving();
@@ -326,7 +325,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
       
     default:
-      console.warn('Unknown message action:', message.action);
+      if (debugModeEnabled) {
+        console.warn('Unknown message action:', message.action);
+      }
   }
   
   sendResponse({ success: true });
@@ -344,7 +345,9 @@ let currentUrl = location.href;
 new MutationObserver(() => {
   if (location.href !== currentUrl) {
     currentUrl = location.href;
-    console.log('Page navigation detected, reinitializing...');
+    if (debugModeEnabled) {
+      console.log('Page navigation detected, reinitializing...');
+    }
     
     processedTweets.clear();
     
@@ -355,5 +358,3 @@ new MutationObserver(() => {
     }, 1000);
   }
 }).observe(document, { subtree: true, childList: true });
-
-console.log('Slop Block content script loaded');

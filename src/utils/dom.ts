@@ -287,30 +287,72 @@ export function collapseToStub(element: Element): void {
     return; // Already collapsed
   }
 
-  // Store original content
+  if (debugMode) {
+    console.log('🎯 Collapsing tweet element:', element);
+  }
+  
+  // Remove any existing collapse headers before storing content
+  const existingHeaders = element.querySelectorAll('.slop-collapse-header');
+  existingHeaders.forEach(header => header.remove());
+  
+  // Store original content (now clean of collapse headers)
   element.setAttribute('data-original-content', element.innerHTML);
   element.setAttribute('data-slop-collapsed', 'true');
   
   // Create collapsible stub
   const stub = document.createElement('div');
   stub.className = 'slop-collapsed';
+  stub.style.cssText = `
+    background: rgb(247, 249, 250) !important;
+    border: 1px solid rgb(207, 217, 222) !important;
+    border-radius: 16px !important;
+    padding: 12px 16px !important;
+    margin: 2px 0 !important;
+    cursor: pointer !important;
+    transition: background-color 0.2s ease !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  `;
+  
   stub.innerHTML = `
-    <div class="slop-collapsed-header">
-      <span class="slop-collapsed-text">AI generated content detected</span>
-      <span class="slop-expand-icon">▼</span>
+    <div class="slop-collapsed-header" style="display: flex !important; align-items: center !important; justify-content: space-between !important; width: 100% !important;">
+      <span class="slop-collapsed-text" style="color: rgb(83, 100, 113) !important; font-size: 15px !important; font-weight: 400 !important; line-height: 20px !important;">AI generated content detected</span>
+      <span class="slop-expand-icon" style="color: rgb(83, 100, 113) !important; font-size: 14px !important; margin-left: 8px !important;">▼</span>
     </div>
   `;
+  
+  // Add hover effect
+  stub.addEventListener('mouseenter', () => {
+    stub.style.background = 'rgb(239, 243, 244) !important';
+  });
+  
+  stub.addEventListener('mouseleave', () => {
+    stub.style.background = 'rgb(247, 249, 250) !important';
+  });
   
   // Add click handler for expansion
   stub.addEventListener('click', (e) => {
     e.stopPropagation();
+    e.preventDefault();
+    if (debugMode) {
+      console.log('🔄 Expanding collapsed tweet');
+    }
     expandFromStub(element);
   });
   
-  // Replace content while preserving tweet container
-  element.innerHTML = '';
-  element.appendChild(stub);
-  element.classList.add('slop-tweet-collapsed');
+  // Replace content while preserving tweet container structure
+  const htmlElement = element as HTMLElement;
+  htmlElement.innerHTML = '';
+  htmlElement.appendChild(stub);
+  htmlElement.classList.add('slop-tweet-collapsed');
+  
+  // Force display to ensure visibility
+  htmlElement.style.display = 'block';
+  htmlElement.style.visibility = 'visible';
+  
+  console.log('✅ Tweet collapsed successfully, stub element:', stub);
 }
 
 export function expandFromStub(element: Element): void {
@@ -318,25 +360,54 @@ export function expandFromStub(element: Element): void {
     return; // Not collapsed
   }
   
+  console.log('🔄 Expanding tweet element:', element);
+  
   // Restore original content
   const originalContent = element.getAttribute('data-original-content');
   if (originalContent) {
     element.innerHTML = originalContent;
   }
   
+  // Remove any existing collapse headers before adding new one
+  const existingHeaders = element.querySelectorAll('.slop-collapse-header');
+  existingHeaders.forEach(header => header.remove());
+  
   // Add collapse header to expanded tweet
   const collapseHeader = document.createElement('div');
   collapseHeader.className = 'slop-collapse-header';
+  collapseHeader.style.cssText = `
+    background: rgb(247, 249, 250) !important;
+    border: 1px solid rgb(207, 217, 222) !important;
+    border-radius: 12px !important;
+    padding: 8px 12px !important;
+    margin-bottom: 8px !important;
+    cursor: pointer !important;
+    transition: background-color 0.2s ease !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    display: block !important;
+  `;
+  
   collapseHeader.innerHTML = `
-    <div class="slop-collapse-button">
-      <span class="slop-collapse-text">Hide AI content</span>
-      <span class="slop-collapse-icon">▲</span>
+    <div class="slop-collapse-button" style="display: flex !important; align-items: center !important; justify-content: space-between !important; width: 100% !important;">
+      <span class="slop-collapse-text" style="color: rgb(83, 100, 113) !important; font-size: 13px !important; font-weight: 400 !important;">Hide AI content</span>
+      <span class="slop-collapse-icon" style="color: rgb(83, 100, 113) !important; font-size: 12px !important; margin-left: 8px !important;">▲</span>
     </div>
   `;
+  
+  // Add hover effect
+  collapseHeader.addEventListener('mouseenter', () => {
+    collapseHeader.style.background = 'rgb(239, 243, 244) !important';
+  });
+  
+  collapseHeader.addEventListener('mouseleave', () => {
+    collapseHeader.style.background = 'rgb(247, 249, 250) !important';
+  });
   
   // Add click handler for collapsing
   collapseHeader.addEventListener('click', (e) => {
     e.stopPropagation();
+    e.preventDefault();
+    console.log('🎯 Collapsing expanded tweet');
     collapseToStub(element);
   });
   
@@ -344,6 +415,9 @@ export function expandFromStub(element: Element): void {
   element.insertBefore(collapseHeader, element.firstChild);
   element.classList.remove('slop-tweet-collapsed');
   element.classList.add('slop-tweet-expanded');
+  element.removeAttribute('data-slop-collapsed');
+  
+  console.log('✅ Tweet expanded successfully with collapse header');
 }
 
 export function applyTweetEffect(element: Element, effect: 'blur' | 'hide'): void {
@@ -472,8 +546,10 @@ export function addDebugHighlight(element: Element, detected: boolean): void {
 }
 
 export function removeTweetEffect(element: Element): void {
+  const htmlElement = element as HTMLElement;
+  
+  // Remove collapse effects
   if (element.hasAttribute('data-slop-collapsed')) {
-    // Restore original content for collapsed tweets
     const originalContent = element.getAttribute('data-original-content');
     if (originalContent) {
       element.innerHTML = originalContent;
@@ -482,12 +558,18 @@ export function removeTweetEffect(element: Element): void {
     element.removeAttribute('data-slop-collapsed');
   }
   
-  // Remove all slop-related classes and effects
-  element.classList.remove('slop-blurred', 'slop-hidden', 'slop-tweet-collapsed', 'slop-tweet-expanded');
-  
-  // Remove any collapse headers that might be present
+  // Remove collapse header from expanded tweets
   const collapseHeaders = element.querySelectorAll('.slop-collapse-header');
   collapseHeaders.forEach(header => header.remove());
+  
+  // Remove all slop-related classes
+  htmlElement.classList.remove('slop-tweet-collapsed', 'slop-tweet-expanded', 'slop-blurred', 'slop-hidden');
+  
+  // Reset any forced styles
+  htmlElement.style.display = '';
+  htmlElement.style.visibility = '';
+  
+  console.log('🧹 Removed all tweet effects from element');
 }
 
 export function throttle<T extends (...args: any[]) => any>(
