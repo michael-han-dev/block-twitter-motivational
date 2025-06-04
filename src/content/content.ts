@@ -70,20 +70,23 @@ async function initialize(): Promise<void> {
     
     debugModeEnabled = location.hostname === 'localhost' || 
                        new URLSearchParams(location.search).has('slopDebug') ||
-                       location.hash.includes('slopDebug');
+                       location.hash === '#slopDebug';
     setDebugMode(debugModeEnabled);
+    
+    if (debugModeEnabled) {
+      console.log('🔧 DEBUG MODE ENABLED - Verbose logging active');
+    }
     
     console.log(`✅ Slop Block initialized: enabled=${isEnabled}, blurMode=${blurMode}, debug=${debugModeEnabled}`);
     
     if (isEnabled) {
       console.log('👀 Starting DOM observation...');
       startObserving();
+      console.log('🔍 Processing existing tweets...');
+      processExistingTweets();
     } else {
       console.log('😴 Extension disabled - skipping DOM observation');
     }
-    
-    console.log('🔍 Processing existing tweets...');
-    processExistingTweets();
     
   } catch (error) {
     console.error('❌ Failed to initialize Slop Block:', error);
@@ -95,29 +98,46 @@ function startObserving(): void {
     observer.disconnect();
   }
   
-  observer = new MutationObserver(throttle((mutations: MutationRecord[]) => {
+  let processingTimeout: number | null = null;
+  let pendingNodes: Element[] = [];
+  
+  observer = new MutationObserver((mutations: MutationRecord[]) => {
     if (!isEnabled) {
       console.log('⚠️ Observer triggered but extension disabled');
       return;
     }
     
-    console.log(`🔄 DOM mutations detected: ${mutations.length} changes`);
-    
+    // Collect all added nodes from mutations
     mutations.forEach((mutation: MutationRecord) => {
       mutation.addedNodes.forEach((node: Node) => {
         if (node.nodeType === Node.ELEMENT_NODE) {
-          processTweetsInNode(node as Element);
+          pendingNodes.push(node as Element);
         }
       });
     });
-  }, 100));
+    
+    // Batch process nodes to avoid excessive processing
+    if (processingTimeout) {
+      clearTimeout(processingTimeout);
+    }
+    
+    processingTimeout = setTimeout(() => {
+      if (pendingNodes.length > 0) {
+        console.log(`🔄 Batch processing ${pendingNodes.length} DOM changes`);
+        
+        // Process all pending nodes at once
+        pendingNodes.forEach(node => processTweetsInNode(node));
+        pendingNodes = [];
+      }
+    }, 200); // Batch changes within 200ms window
+  });
   
   observer.observe(document.body, {
     childList: true,
     subtree: true
   });
   
-  console.log('👁️ DOM observer started');
+  console.log('👁️ DOM observer started with batching');
 }
 
 function stopObserving(): void {
@@ -134,32 +154,51 @@ const processExistingTweets = debounce((): void => {
     return;
   }
   
-  console.log('🔍 Processing existing tweets...');
-  const startTime = performance.now();
-  processTweetsInNode(document.body);
-  const endTime = performance.now();
-  console.log(`⏱️ Tweet processing completed in ${(endTime - startTime).toFixed(2)}ms`);
-}, 200);
+  // Wait for Twitter to load tweets before processing
+  const checkForTweets = () => {
+    console.log('🔍 Checking for existing tweets...');
+    const startTime = performance.now();
+    
+    const tweetCount = document.querySelectorAll('[data-testid="tweet"]').length;
+    console.log(`📊 Found ${tweetCount} tweet elements in DOM`);
+    
+    if (tweetCount > 0) {
+      processTweetsInNode(document.body);
+      const endTime = performance.now();
+      console.log(`⏱️ Tweet processing completed in ${(endTime - startTime).toFixed(2)}ms`);
+    } else {
+      console.log('⏳ No tweets found yet, will retry when DOM changes');
+    }
+  };
+  
+  // Initial check
+  checkForTweets();
+}, 300);
 
 function processTweetsInNode(node: Element): void {
   const tweets = findTweetElements(node);
-  console.log(`🐦 Found ${tweets.length} tweet elements`);
   
-  if (tweets.length === 0) {
-    console.log('📄 No tweets found - checking selectors on current page');
-    const testSelectors = [
-      '[data-testid="tweet"]',
-      'article[data-testid="tweet"]',
-      '[data-testid="tweetText"]'
-    ];
-    testSelectors.forEach(selector => {
-      const elements = node.querySelectorAll(selector);
-      console.log(`🎯 Selector "${selector}": ${elements.length} elements`);
-    });
+  if (debugModeEnabled) {
+    console.log(`🐦 Found ${tweets.length} tweet elements`);
+    
+    if (tweets.length === 0) {
+      console.log('📄 No tweets found - checking selectors on current page');
+      const testSelectors = [
+        '[data-testid="tweet"]',
+        'article[data-testid="tweet"]',
+        '[data-testid="tweetText"]'
+      ];
+      testSelectors.forEach(selector => {
+        const elements = node.querySelectorAll(selector);
+        console.log(`🎯 Selector "${selector}": ${elements.length} elements`);
+      });
+    }
   }
   
   tweets.forEach((tweet, index) => {
-    console.log(`🔄 Processing tweet ${index + 1}/${tweets.length}`);
+    if (debugModeEnabled) {
+      console.log(`🔄 Processing tweet ${index + 1}/${tweets.length}`);
+    }
     processTweet(tweet);
   });
 }
@@ -197,22 +236,15 @@ function processTweet(tweet: TweetElement): void {
           likes: tweet.metadata.likes,
           retweets: tweet.metadata.retweets,
           replies: tweet.metadata.replies
-        },
-        blurMode: blurMode
+        }
       });
       
-      if (blurMode) {
-        console.log('🌫️ Applying blur effect');
-        applyTweetEffect(tweet.element, 'blur');
-      } else {
-        console.log('🔄 Replacing with hidden message');
-        replaceWithHiddenMessage(tweet.element);
-      }
+      console.log('📦 Applying collapse effect');
+      applyTweetEffect(tweet.element, 'hide'); // Effect type doesn't matter, always collapses
       
       addDebugHighlight(tweet.element, true);
       
-      chrome.runtime.sendMessage({ action: 'updateCount', count: 1 })
-        .catch(error => console.log('📡 Background script not ready:', error));
+      safeRuntimeMessage({ action: 'updateCount', count: 1 });
     } else {
       console.log('✅ Tweet is not slop, removing any effects');
       removeTweetEffect(tweet.element);
@@ -235,6 +267,29 @@ function clearAllEffects(): void {
   console.log('All tweet effects cleared');
 }
 
+function isExtensionContextValid(): boolean {
+  try {
+    return !!(chrome.runtime && chrome.runtime.id);
+  } catch {
+    return false;
+  }
+}
+
+function safeRuntimeMessage(message: any): void {
+  if (!isExtensionContextValid()) {
+    console.log('⚠️ Extension context invalid, skipping runtime message');
+    return;
+  }
+  
+  try {
+    chrome.runtime.sendMessage(message).catch(() => {
+      // Silently ignore runtime message failures
+    });
+  } catch {
+    // Extension context invalidated during call
+  }
+}
+
 // Handle messages from background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Content script received message:', message);
@@ -242,7 +297,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.action) {
     case 'toggleSlop':
       isEnabled = message.enabled;
-      console.log(`Slop Block ${isEnabled ? 'enabled' : 'disabled'}`);
+      console.log(`✅ Extension ${isEnabled ? 'ENABLED' : 'DISABLED'} via message`);
       
       if (isEnabled) {
         startObserving();
@@ -301,4 +356,4 @@ new MutationObserver(() => {
   }
 }).observe(document, { subtree: true, childList: true });
 
-console.log('Slop Block content script loaded'); 
+console.log('Slop Block content script loaded');

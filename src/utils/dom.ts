@@ -30,13 +30,22 @@ export function setDebugMode(enabled: boolean): void {
 export function findTweetElements(node: Element): TweetElement[] {
   const tweets: TweetElement[] = [];
   
-  // Twitter/X uses data-testid="tweet" for individual tweets
+  // Modern Twitter/X uses data-testid="tweet" for individual tweets - this is still current
   const tweetElements = node.querySelectorAll('[data-testid="tweet"]');
   
-  tweetElements.forEach(element => {
+  if (debugMode) {
+    console.log(`🔍 findTweetElements: Found ${tweetElements.length} tweet containers in node`);
+  }
+  
+  tweetElements.forEach((element, index) => {
     const tweetData = extractTweetData(element);
     if (tweetData) {
       tweets.push(tweetData);
+      if (debugMode) {
+        console.log(`✅ Tweet ${index + 1} extracted successfully`);
+      }
+    } else if (debugMode) {
+      console.log(`❌ Tweet ${index + 1} failed extraction`);
     }
   });
   
@@ -127,38 +136,51 @@ function extractTweetData(element: Element): TweetElement | null {
  * Robust text extraction with multiple strategies
  */
 function extractTweetTextRobust(element: Element): string {
-  // Strategy 1: Primary selector
+  // Strategy 1: Primary selector - this is still the main selector for tweet text
   let textElement = element.querySelector('[data-testid="tweetText"]');
   if (textElement?.textContent?.trim()) {
+    if (debugMode) {
+      console.log('📝 Text extracted via primary selector [data-testid="tweetText"]');
+    }
     return textElement.textContent.trim();
   }
   
-  // Strategy 2: Language-tagged elements (Twitter often uses lang attributes)
-  const langElements = element.querySelectorAll('[lang]');
-  for (const langEl of Array.from(langElements)) {
-    const text = langEl.textContent?.trim();
-    if (text && text.length > 20 && !text.includes('http') && !text.includes('@')) {
-      return text;
-    }
-  }
-  
-  // Strategy 3: Common Twitter CSS classes
-  const cssSelectors = [
-    '.css-1jxf684',
-    '.css-1qaijid', 
-    'span[dir="auto"]',
-    'div[lang] span',
+  // Strategy 2: Alternative direct text selectors
+  const directSelectors = [
+    '[data-testid="tweetText"] span',
+    'div[data-testid="tweetText"]',
+    '[lang] span[dir="ltr"]',
+    '[lang] span[dir="auto"]'
   ];
   
-  for (const selector of cssSelectors) {
+  for (const selector of directSelectors) {
     const found = element.querySelector(selector);
     const text = found?.textContent?.trim();
     if (text && text.length > 10) {
+      if (debugMode) {
+        console.log(`📝 Text extracted via selector: ${selector}`);
+      }
       return text;
     }
   }
   
-  // Strategy 4: Traverse all text nodes and combine meaningful content
+  // Strategy 3: Language-tagged elements (Twitter uses lang attributes)
+  const langElements = element.querySelectorAll('[lang]');
+  for (const langEl of Array.from(langElements)) {
+    const text = langEl.textContent?.trim();
+    if (text && text.length > 20 && 
+        !text.includes('http') && 
+        !text.includes('@') &&
+        !text.includes('·') &&
+        !text.match(/^\d+[mhsd]$/)) {
+      if (debugMode) {
+        console.log('📝 Text extracted via language-tagged element');
+      }
+      return text;
+    }
+  }
+  
+  // Strategy 4: Traverse text nodes and combine meaningful content
   const textNodes = getAllTextNodes(element);
   let combinedText = '';
   
@@ -168,12 +190,19 @@ function extractTweetTextRobust(element: Element): string {
         !text.includes('·') && 
         !text.match(/^\d+[mhs]$/) && 
         !text.includes('Show this thread') &&
-        !text.includes('Replying to')) {
+        !text.includes('Replying to') &&
+        !text.includes('Translate') &&
+        !text.includes('View post analytics')) {
       combinedText += text + ' ';
     }
   }
   
-  return combinedText.trim();
+  const result = combinedText.trim();
+  if (debugMode) {
+    console.log(`📝 Text extraction result: "${result.substring(0, 100)}..." (length: ${result.length})`);
+  }
+  
+  return result;
 }
 
 /**
@@ -253,15 +282,73 @@ function parseEngagementNumber(text: string): number {
   }
 }
 
+export function collapseToStub(element: Element): void {
+  if (element.hasAttribute('data-slop-collapsed')) {
+    return; // Already collapsed
+  }
+
+  // Store original content
+  element.setAttribute('data-original-content', element.innerHTML);
+  element.setAttribute('data-slop-collapsed', 'true');
+  
+  // Create collapsible stub
+  const stub = document.createElement('div');
+  stub.className = 'slop-collapsed';
+  stub.innerHTML = `
+    <div class="slop-collapsed-header">
+      <span class="slop-collapsed-text">AI generated content detected</span>
+      <span class="slop-expand-icon">▼</span>
+    </div>
+  `;
+  
+  // Add click handler for expansion
+  stub.addEventListener('click', (e) => {
+    e.stopPropagation();
+    expandFromStub(element);
+  });
+  
+  // Replace content while preserving tweet container
+  element.innerHTML = '';
+  element.appendChild(stub);
+  element.classList.add('slop-tweet-collapsed');
+}
+
+export function expandFromStub(element: Element): void {
+  if (!element.hasAttribute('data-slop-collapsed')) {
+    return; // Not collapsed
+  }
+  
+  // Restore original content
+  const originalContent = element.getAttribute('data-original-content');
+  if (originalContent) {
+    element.innerHTML = originalContent;
+  }
+  
+  // Add collapse header to expanded tweet
+  const collapseHeader = document.createElement('div');
+  collapseHeader.className = 'slop-collapse-header';
+  collapseHeader.innerHTML = `
+    <div class="slop-collapse-button">
+      <span class="slop-collapse-text">Hide AI content</span>
+      <span class="slop-collapse-icon">▲</span>
+    </div>
+  `;
+  
+  // Add click handler for collapsing
+  collapseHeader.addEventListener('click', (e) => {
+    e.stopPropagation();
+    collapseToStub(element);
+  });
+  
+  // Insert collapse header at the top
+  element.insertBefore(collapseHeader, element.firstChild);
+  element.classList.remove('slop-tweet-collapsed');
+  element.classList.add('slop-tweet-expanded');
+}
 
 export function applyTweetEffect(element: Element, effect: 'blur' | 'hide'): void {
-  element.classList.remove('slop-blurred', 'slop-hidden');
-  
-  if (effect === 'blur') {
-    element.classList.add('slop-blurred');
-  } else if (effect === 'hide') {
-    element.classList.add('slop-hidden');
-  }
+  // Replace blur/hide with collapse effect
+  collapseToStub(element);
 }
 
 /**
@@ -385,9 +472,23 @@ export function addDebugHighlight(element: Element, detected: boolean): void {
 }
 
 export function removeTweetEffect(element: Element): void {
-  element.classList.remove('slop-blurred', 'slop-hidden');
+  if (element.hasAttribute('data-slop-collapsed')) {
+    // Restore original content for collapsed tweets
+    const originalContent = element.getAttribute('data-original-content');
+    if (originalContent) {
+      element.innerHTML = originalContent;
+    }
+    element.removeAttribute('data-original-content');
+    element.removeAttribute('data-slop-collapsed');
+  }
+  
+  // Remove all slop-related classes and effects
+  element.classList.remove('slop-blurred', 'slop-hidden', 'slop-tweet-collapsed', 'slop-tweet-expanded');
+  
+  // Remove any collapse headers that might be present
+  const collapseHeaders = element.querySelectorAll('.slop-collapse-header');
+  collapseHeaders.forEach(header => header.remove());
 }
-
 
 export function throttle<T extends (...args: any[]) => any>(
   func: T,
