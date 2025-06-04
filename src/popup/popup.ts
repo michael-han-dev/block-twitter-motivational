@@ -15,10 +15,13 @@ class PopupController {
 
   private async loadCurrentState(): Promise<void> {
     try {
+      console.log('🔍 Popup loading current state from storage...');
       const isEnabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);
+      console.log('📊 Current state from storage:', isEnabled);
       this.toggleSwitch.checked = isEnabled;
+      console.log('✅ Toggle switch updated to:', isEnabled);
     } catch (error) {
-      console.error('Failed to load current state:', error);
+      console.error('❌ Failed to load current state:', error);
     }
   }
 
@@ -31,32 +34,25 @@ class PopupController {
   private async handleToggleChange(): Promise<void> {
     try {
       const newState = this.toggleSwitch.checked;
+      console.log('🔄 Toggle changed to:', newState);
       
+      console.log('💾 Saving new state to storage...');
       await setStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, newState);
-      
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tabs[0]?.id && this.isTwitterTab(tabs[0].url)) {
-        try {
-          await chrome.tabs.sendMessage(tabs[0].id, { 
-            action: 'toggleSlop', 
-            enabled: newState 
-          });
-        } catch (error) {
-          console.log('Content script not ready, will sync on next page load');
-        }
-      }
+      console.log('✅ State saved to storage');
       
       try {
+        console.log('📡 Notifying background script...');
         await chrome.runtime.sendMessage({
           action: 'stateChanged',
           enabled: newState
         });
+        console.log('✅ Background script notified');
       } catch (error) {
-        console.log('Background script not ready');
+        console.log('⚠️ Background script not ready:', error);
       }
       
     } catch (error) {
-      console.error('Failed to handle toggle change:', error);
+      console.error('❌ Failed to handle toggle change:', error);
       this.toggleSwitch.checked = !this.toggleSwitch.checked;
     }
   }
