@@ -1,360 +1,294 @@
-import { findTweetElements, applyTweetEffect, removeTweetEffect, throttle, debounce, TweetElement, setDebugMode, replaceWithHiddenMessage, addDebugHighlight } from '../utils/dom';
-import { getStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '../utils/storage';
-import { isSlop, isWhitelisted } from '../rules/rules';
+import { getStorageValue, setStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '../utils/storage';
+import { getTweetElements, extractTweetData, applyTweetEffect, removeTweetEffect, addDebugHighlight } from '../utils/dom';
+import { analyzeTweet } from '../rules/rules';
 
-// Extension state variables
-let observer: MutationObserver | null = null;
 let isEnabled = false;
-let blurMode = true;
-let debugModeEnabled = false;
-let userWhitelist: string[] = [];
-let processedTweets = new Set<Element>();
+let processingQueue: Element[] = [];
+let isProcessingQueue = false;
+let observer: MutationObserver | null = null;
+let loadCheckInterval: number | null = null;
+let navigationTimeout: number | null = null;
 
-chrome.storage.onChanged.addListener(async (changes, area) => {
-  if (debugModeEnabled) {
-    console.log('🔄 Storage change detected:', { area, changes });
+function log(...args: any[]): void {
+  console.log('[SlopBlock Content]', ...args);
+}
+
+function isTwitterLoaded(): boolean {
+  return document.querySelectorAll('[data-testid="tweet"]').length > 0;
+}
+
+function startLoadCheck(): void {
+  if (loadCheckInterval) {
+    clearInterval(loadCheckInterval);
   }
   
-  if (area === 'sync') {
-    if (changes[STORAGE_KEYS.SLOP_BLOCK_ENABLED]) {
-      const newEnabled = changes[STORAGE_KEYS.SLOP_BLOCK_ENABLED].newValue;
+  loadCheckInterval = window.setInterval(() => {
+    log('⏳ Checking if Twitter is loaded...');
+    if (isTwitterLoaded()) {
+      log('✅ Twitter loaded, starting slop detection');
+      clearInterval(loadCheckInterval!);
+      loadCheckInterval = null;
       
-      if (newEnabled !== isEnabled) {
-        isEnabled = newEnabled;
-        console.log(`Extension ${isEnabled ? 'ENABLED' : 'DISABLED'}`);
-        
-        if (isEnabled) {
-          startObserving();
-          processExistingTweets();
-        } else {
-          stopObserving();
-          clearAllEffects();
-        }
-      }
-    }
-    
-    if (changes[STORAGE_KEYS.BLUR_MODE]) {
-      const newBlurMode = changes[STORAGE_KEYS.BLUR_MODE].newValue;
-      if (newBlurMode !== blurMode) {
-        blurMode = newBlurMode;
-        if (isEnabled) {
-          clearAllEffects();
-          processExistingTweets();
-        }
-      }
-    }
-    
-    if (changes[STORAGE_KEYS.USER_WHITELIST]) {
-      const newWhitelist = changes[STORAGE_KEYS.USER_WHITELIST].newValue;
-      userWhitelist = newWhitelist;
       if (isEnabled) {
-        clearAllEffects();
-        processExistingTweets();
+        initializeSlop();
       }
     }
-  }
-});
+  }, 1000);
+}
 
-async function initialize(): Promise<void> {
-  try {
-    isEnabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);
-    blurMode = await getStorageValue(STORAGE_KEYS.BLUR_MODE, DEFAULT_VALUES[STORAGE_KEYS.BLUR_MODE]);
-    userWhitelist = await getStorageValue(STORAGE_KEYS.USER_WHITELIST, DEFAULT_VALUES[STORAGE_KEYS.USER_WHITELIST]);
-    
-    debugModeEnabled = location.hash === '#slopDebug';
-    setDebugMode(debugModeEnabled);
-    
-    if (debugModeEnabled) {
-      console.log('🔧 DEBUG MODE ENABLED - Verbose logging active');
-      console.log('📊 Initial state:', { isEnabled, blurMode, whitelistLength: userWhitelist.length });
-    }
-    
-    console.log(`Slop Block initialized: ${isEnabled ? 'enabled' : 'disabled'}`);
-    
-    if (isEnabled) {
-      startObserving();
-      processExistingTweets();
-    }
-    
-  } catch (error) {
-    console.error('Failed to initialize Slop Block:', error);
+function debugLog(...args: any[]): void {
+  if (window.location.hash.includes('slopDebug')) {
+    console.log('[SlopBlock Debug]', ...args);
   }
 }
 
-function startObserving(): void {
+function addToProcessingQueue(element: Element): void {
+  if (!processingQueue.includes(element)) {
+    processingQueue.push(element);
+  }
+  
+  if (!isProcessingQueue) {
+    scheduleQueueProcessing();
+  }
+}
+
+function scheduleQueueProcessing(): void {
+  if (isProcessingQueue) return;
+  
+  isProcessingQueue = true;
+  setTimeout(() => {
+    processQueue();
+    isProcessingQueue = false;
+  }, 200);
+}
+
+function processQueue(): void {
+  if (processingQueue.length === 0) return;
+  
+  log(`📦 Processing queue of ${processingQueue.length} elements`);
+  
+  const currentQueue = [...processingQueue];
+  processingQueue = [];
+  
+  currentQueue.forEach(element => {
+    if (document.contains(element)) {
+      processTweet(element as HTMLElement);
+    }
+  });
+}
+
+function initializeSlop(): void {
+  if (!isEnabled) {
+    log('❌ Slop detection disabled, skipping initialization');
+    return;
+  }
+
+  log('🚀 Initializing slop detection system...');
+  
+  startObserver();
+  
+  setTimeout(() => {
+    processTweets();
+  }, 500);
+}
+
+function processTweets(): void {
+  log('🔍 Scanning for tweets...');
+  
+  const tweets = getTweetElements();
+  log(`📊 Found ${tweets.length} unprocessed tweets`);
+  
+  tweets.forEach(element => {
+    addToProcessingQueue(element);
+  });
+}
+
+function processTweet(element: HTMLElement): void {
+  try {
+    const tweet = extractTweetData(element);
+    if (!tweet) {
+      debugLog('❌ Could not extract tweet data from element:', element);
+      return;
+    }
+
+    debugLog('📝 Processing tweet:', {
+      username: tweet.username,
+      textLength: tweet.text.length,
+      textPreview: tweet.text.substring(0, 100)
+    });
+
+    const analysis = analyzeTweet(tweet);
+    
+    debugLog('🎯 Analysis result:', {
+      isSlop: analysis.isSlop,
+      confidence: analysis.confidence,
+      reasons: analysis.reasons
+    });
+
+    if (analysis.isSlop) {
+      log(`🚫 SLOP DETECTED (confidence: ${(analysis.confidence * 100).toFixed(1)}%):`, {
+        username: tweet.username,
+        reasons: analysis.reasons,
+        text: tweet.text.substring(0, 100) + '...'
+      });
+      
+      applyTweetEffect(tweet.element, 'hide');
+    }
+
+    addDebugHighlight(tweet.element, analysis.isSlop);
+    tweet.element.closest('article')?.setAttribute('data-slop-processed', 'true');
+
+  } catch (error) {
+    console.error('❌ Error processing tweet:', error, element);
+  }
+}
+
+function startObserver(): void {
   if (observer) {
     observer.disconnect();
   }
-  
-  let processingTimeout: number | null = null;
-  let pendingNodes: Element[] = [];
-  
-  observer = new MutationObserver((mutations: MutationRecord[]) => {
+
+  observer = new MutationObserver((mutations) => {
     if (!isEnabled) return;
+
+    const addedNodes: Element[] = [];
     
-    // Collect all added nodes from mutations
-    mutations.forEach((mutation: MutationRecord) => {
-      mutation.addedNodes.forEach((node: Node) => {
+    mutations.forEach(mutation => {
+      mutation.addedNodes.forEach(node => {
         if (node.nodeType === Node.ELEMENT_NODE) {
-          pendingNodes.push(node as Element);
+          const element = node as Element;
+          
+          const tweets = element.querySelectorAll ? 
+            Array.from(element.querySelectorAll('[data-testid="tweet"]')) : [];
+          
+          if (element.matches && element.matches('[data-testid="tweet"]')) {
+            tweets.push(element);
+          }
+          
+          addedNodes.push(...tweets);
         }
       });
     });
-    
-    // Batch process nodes to avoid excessive processing
-    if (processingTimeout) {
-      clearTimeout(processingTimeout);
+
+    if (addedNodes.length > 0) {
+      debugLog(`👀 Observer detected ${addedNodes.length} new tweet(s)`);
+      addedNodes.forEach(element => {
+        addToProcessingQueue(element);
+      });
     }
-    
-    processingTimeout = setTimeout(() => {
-      if (pendingNodes.length > 0) {
-        if (debugModeEnabled) {
-          console.log(`🔄 Batch processing ${pendingNodes.length} DOM changes`);
-        }
-        
-        // Process all pending nodes at once
-        pendingNodes.forEach(node => processTweetsInNode(node));
-        pendingNodes = [];
-      }
-    }, 200); // Batch changes within 200ms window
   });
-  
+
   observer.observe(document.body, {
     childList: true,
-    subtree: true
+    subtree: true,
+    attributes: false
   });
-  
-  if (debugModeEnabled) {
-    console.log('👁️ DOM observer started with batching');
-  }
+
+  log('👁️ MutationObserver started for dynamic content detection');
 }
 
-function stopObserving(): void {
+function stopObserver(): void {
   if (observer) {
     observer.disconnect();
     observer = null;
-  }
-  if (debugModeEnabled) {
-    console.log('DOM observer stopped');
+    log('🛑 MutationObserver stopped');
   }
 }
 
-const processExistingTweets = debounce((): void => {
-  if (!isEnabled) return;
+function cleanupSlop(): void {
+  log('🧹 Cleaning up slop effects...');
   
-  // Wait for Twitter to load tweets before processing
-  const checkForTweets = () => {
-    const tweetCount = document.querySelectorAll('[data-testid="tweet"]').length;
-    
-    if (debugModeEnabled) {
-      console.log(`🔍 Found ${tweetCount} tweet elements in DOM`);
-    }
-    
-    if (tweetCount > 0) {
-      const startTime = performance.now();
-      processTweetsInNode(document.body);
-      if (debugModeEnabled) {
-        const endTime = performance.now();
-        console.log(`⏱️ Tweet processing completed in ${(endTime - startTime).toFixed(2)}ms`);
-      }
-    }
-  };
-  
-  // Initial check
-  checkForTweets();
-}, 300);
-
-function processTweetsInNode(node: Element): void {
-  const tweets = findTweetElements(node);
-  
-  if (debugModeEnabled) {
-    console.log(`🐦 Found ${tweets.length} tweet elements`);
-    
-    if (tweets.length === 0) {
-      console.log('📄 No tweets found - checking selectors on current page');
-      const testSelectors = [
-        '[data-testid="tweet"]',
-        'article[data-testid="tweet"]',
-        '[data-testid="tweetText"]'
-      ];
-      testSelectors.forEach(selector => {
-        const elements = node.querySelectorAll(selector);
-        console.log(`🎯 Selector "${selector}": ${elements.length} elements`);
-      });
-    }
-  }
-  
-  tweets.forEach((tweet, index) => {
-    if (debugModeEnabled) {
-      console.log(`🔄 Processing tweet ${index + 1}/${tweets.length}`);
-    }
-    processTweet(tweet);
+  const processedTweets = document.querySelectorAll('[data-slop-processed="true"]');
+  processedTweets.forEach(tweet => {
+    const tweetElement = tweet as HTMLElement;
+    removeTweetEffect(tweetElement);
+    tweetElement.removeAttribute('data-slop-processed');
   });
+  
+  log(`✅ Cleaned up ${processedTweets.length} processed tweets`);
 }
 
-function processTweet(tweet: TweetElement): void {
-  if (processedTweets.has(tweet.element)) {
-    return;
-  }
+async function updateState(enabled: boolean): Promise<void> {
+  const wasEnabled = isEnabled;
+  isEnabled = enabled;
   
-  try {
-    if (debugModeEnabled) {
-      console.log('📝 Tweet details:', {
-        textLength: tweet.textContent.length,
-        textPreview: tweet.textContent.substring(0, 50) + (tweet.textContent.length > 50 ? '...' : ''),
-        username: tweet.metadata.username
-      });
-    }
-    
-    if (tweet.metadata.username && isWhitelisted(tweet.metadata.username, userWhitelist)) {
-      if (debugModeEnabled) {
-        console.log(`✅ User "${tweet.metadata.username}" is whitelisted, skipping`);
-      }
-      addDebugHighlight(tweet.element, false);
-      processedTweets.add(tweet.element);
-      return;
-    }
-    
-    const isSlopContent = isSlop(tweet.textContent, tweet.metadata);
-    
-    if (isSlopContent) {
-      console.log('🚨 AI content detected and collapsed');
-      if (debugModeEnabled) {
-        console.log('📊 Details:', {
-          text: tweet.textContent.substring(0, 100) + '...',
-          username: tweet.metadata.username,
-          engagement: {
-            likes: tweet.metadata.likes,
-            retweets: tweet.metadata.retweets,
-            replies: tweet.metadata.replies
-          }
-        });
-      }
-      
-      applyTweetEffect(tweet.element, 'hide'); // Effect type doesn't matter, always collapses
-      addDebugHighlight(tweet.element, true);
-      safeRuntimeMessage({ action: 'updateCount', count: 1 });
+  log(`🔄 State changed: ${wasEnabled} → ${enabled}`);
+  
+  if (enabled && !wasEnabled) {
+    if (isTwitterLoaded()) {
+      initializeSlop();
     } else {
-      removeTweetEffect(tweet.element);
-      addDebugHighlight(tweet.element, false);
+      startLoadCheck();
     }
-    
-    processedTweets.add(tweet.element);
-    
-    if (debugModeEnabled) {
-      console.log(`📊 Total processed tweets: ${processedTweets.size}`);
+  } else if (!enabled && wasEnabled) {
+    stopObserver();
+    cleanupSlop();
+    if (loadCheckInterval) {
+      clearInterval(loadCheckInterval);
+      loadCheckInterval = null;
+    }
+  }
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  try {
+    if (message.action === 'stateChanged') {
+      updateState(message.enabled);
+      sendResponse({ success: true });
     }
   } catch (error) {
-    console.error('Error processing tweet:', error);
-    if (debugModeEnabled) {
-      console.error('Tweet data:', { element: tweet.element, text: tweet.textContent });
-    }
-  }
-}
-
-function clearAllEffects(): void {
-  processedTweets.forEach(element => {
-    removeTweetEffect(element);
-  });
-  processedTweets.clear();
-  if (debugModeEnabled) {
-    console.log('All tweet effects cleared');
-  }
-}
-
-function isExtensionContextValid(): boolean {
-  try {
-    return !!(chrome.runtime && chrome.runtime.id);
-  } catch {
-    return false;
-  }
-}
-
-function safeRuntimeMessage(message: any): void {
-  if (!isExtensionContextValid()) {
-    if (debugModeEnabled) {
-      console.log('⚠️ Extension context invalid, skipping runtime message');
-    }
-    return;
+    console.error('Error in message listener:', error);
+    sendResponse({ success: false, error: String(error) });
   }
   
-  try {
-    chrome.runtime.sendMessage(message).catch(() => {
-      // Silently ignore runtime message failures
-    });
-  } catch {
-    // Extension context invalidated during call
-  }
-}
-
-// Handle messages from background script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (debugModeEnabled) {
-    console.log('Content script received message:', message);
-  }
-  
-  switch (message.action) {
-    case 'toggleSlop':
-      isEnabled = message.enabled;
-      console.log(`Extension ${isEnabled ? 'ENABLED' : 'DISABLED'} via message`);
-      
-      if (isEnabled) {
-        startObserving();
-        processExistingTweets();
-      } else {
-        stopObserving();
-        clearAllEffects();
-      }
-      break;
-      
-    case 'updateSettings':
-      if (message.blurMode !== undefined) {
-        blurMode = message.blurMode;
-        if (isEnabled) {
-          clearAllEffects();
-          processExistingTweets();
-        }
-      }
-      if (message.whitelist !== undefined) {
-        userWhitelist = message.whitelist;
-        if (isEnabled) {
-          clearAllEffects();
-          processExistingTweets();
-        }
-      }
-      break;
-      
-    default:
-      if (debugModeEnabled) {
-        console.warn('Unknown message action:', message.action);
-      }
-  }
-  
-  sendResponse({ success: true });
   return true;
 });
+
+function handleNavigation(): void {
+  log('🧭 Navigation detected, reinitializing...');
+  
+  if (navigationTimeout) {
+    clearTimeout(navigationTimeout);
+  }
+  
+  navigationTimeout = window.setTimeout(() => {
+    if (isEnabled) {
+      processTweets();
+    }
+  }, 1000);
+}
+
+let lastUrl = location.href;
+new MutationObserver(() => {
+  const url = location.href;
+  if (url !== lastUrl) {
+    lastUrl = url;
+    handleNavigation();
+  }
+}).observe(document, { subtree: true, childList: true });
+
+async function initialize(): Promise<void> {
+  try {
+    log('🔧 Initializing content script...');
+    
+    const enabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);
+    log(`📊 Initial state from storage: ${enabled}`);
+    
+    await updateState(enabled);
+    
+    if (!isTwitterLoaded()) {
+      log('⏳ Twitter not loaded yet, starting load check...');
+      startLoadCheck();
+    }
+    
+    log('✅ Content script initialization complete');
+  } catch (error) {
+    console.error('❌ Content script initialization failed:', error);
+  }
+}
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initialize);
 } else {
   initialize();
 }
-
-// Handle SPA navigation
-let currentUrl = location.href;
-new MutationObserver(() => {
-  if (location.href !== currentUrl) {
-    currentUrl = location.href;
-    if (debugModeEnabled) {
-      console.log('Page navigation detected, reinitializing...');
-    }
-    
-    processedTweets.clear();
-    
-    setTimeout(() => {
-      if (isEnabled) {
-        processExistingTweets();
-      }
-    }, 1000);
-  }
-}).observe(document, { subtree: true, childList: true });

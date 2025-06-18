@@ -2,597 +2,510 @@
  * DOM manipulation utilities for Twitter/X content detection and modification
  */
 
-export interface TweetElement {
-  element: Element;
-  textContent: string;
-  metadata: TweetMetadata;
-}
+import { TweetMetadata } from './storage';
 
-export interface TweetMetadata {
-  likes: number;
-  retweets: number;
-  replies: number;
-  accountAge?: Date;
-  isVerified: boolean;
-  username?: string;
-}
-
-// Debug mode flag for detailed logging
-let debugMode = false;
-
-export function setDebugMode(enabled: boolean): void {
-  debugMode = enabled;
-}
-
-/**
- * Find tweet elements in the given DOM node
- */
-export function findTweetElements(node: Element): TweetElement[] {
-  const tweets: TweetElement[] = [];
-  
-  // Modern Twitter/X uses data-testid="tweet" for individual tweets - this is still current
-  const tweetElements = node.querySelectorAll('[data-testid="tweet"]');
-  
-  if (debugMode) {
-    console.log(`🔍 findTweetElements: Found ${tweetElements.length} tweet containers in node`);
+declare global {
+  interface Window {
+    DEBUG_SLOP_DETECTION?: boolean;
   }
-  
-  tweetElements.forEach((element, index) => {
-    const tweetData = extractTweetData(element);
-    if (tweetData) {
-      tweets.push(tweetData);
-      if (debugMode) {
-        console.log(`✅ Tweet ${index + 1} extracted successfully`);
-      }
-    } else if (debugMode) {
-      console.log(`❌ Tweet ${index + 1} failed extraction`);
-    }
-  });
-  
-  return tweets;
 }
 
-/**
- * Comprehensive DOM analysis for debugging
- */
-function analyzeTweetDOM(element: Element): void {
-  if (!debugMode) return;
-  
-  console.log('=== TWEET DOM ANALYSIS ===');
-  console.log('Main element:', element);
-  console.log('innerHTML preview:', element.innerHTML.substring(0, 300));
-  
-  // Check multiple potential text selectors
-  const selectors = [
-    '[data-testid="tweetText"]',
-    '.css-1jxf684',
-    '.css-1qaijid',
-    '[lang]',
-    'span[dir="auto"]',
-    'div[lang]',
-    'span:not([class*="icon"]):not([aria-hidden="true"])',
-  ];
-  
-  selectors.forEach(selector => {
-    const found = element.querySelector(selector);
-    if (found?.textContent?.trim()) {
-      console.log(`✓ Selector "${selector}":`, found.textContent.substring(0, 100));
-    } else {
-      console.log(`✗ Selector "${selector}": no content`);
-    }
-  });
-  
-  // Analyze text nodes
-  const textNodes = getAllTextNodes(element);
-  console.log(`Found ${textNodes.length} text nodes`);
-  textNodes.slice(0, 3).forEach((node, i) => {
-    console.log(`Text node ${i}:`, node.textContent?.substring(0, 100));
+let processingQueue: Element[] = [];
+let isProcessing = false;
+
+const DEBUG = window.DEBUG_SLOP_DETECTION || false;
+
+function debugLog(...args: any[]): void {
+  if (DEBUG) {
+    console.log('[SlopBlock DOM]', ...args);
+  }
+}
+
+interface ProcessingStats {
+  totalTweets: number;
+  textExtracted: number;
+  slopDetected: number;
+}
+
+const stats: ProcessingStats = {
+  totalTweets: 0,
+  textExtracted: 0,
+  slopDetected: 0
+};
+
+function getTweetElements(): Element[] {
+  return Array.from(document.querySelectorAll('[data-testid="tweet"]')).filter(tweet => {
+    const parent = tweet.closest('article');
+    return parent && !parent.hasAttribute('data-slop-processed');
   });
 }
 
-/**
- * Enhanced text extraction with multiple fallback selectors
- */
-function extractTweetData(element: Element): TweetElement | null {
+function extractTweetData(element: Element): TweetMetadata | null {
   try {
-    analyzeTweetDOM(element);
-    
-    const textContent = extractTweetTextRobust(element);
-    
-    if (debugMode) {
-      console.log('Extracted text length:', textContent.length);
-      console.log('Extracted text preview:', textContent.substring(0, 150));
+    const tweetText = extractTweetTextRobust(element);
+    if (!tweetText) {
+      debugLog('No text extracted for tweet:', element);
+      return null;
     }
 
-    const likes = extractEngagementCount(element, 'like');
-    const retweets = extractEngagementCount(element, 'retweet');
-    const replies = extractEngagementCount(element, 'reply');
+    stats.textExtracted++;
 
-    const isVerified = !!element.querySelector('[data-testid="icon-verified"]');
+    const userElement = element.querySelector('[data-testid="User-Name"]');
+    const username = userElement?.textContent?.trim() || 'unknown';
 
-    const usernameElement = element.querySelector('[data-testid="User-Name"] a');
-    const username = usernameElement?.textContent?.replace('@', '') || '';
-    
+    const engagementElements = {
+      replies: element.querySelector('[data-testid="reply"]'),
+      retweets: element.querySelector('[data-testid="retweet"]'),
+      likes: element.querySelector('[data-testid="like"]')
+    };
+
+    const engagement = {
+      replies: parseEngagementCount(engagementElements.replies?.textContent || '0'),
+      retweets: parseEngagementCount(engagementElements.retweets?.textContent || '0'),
+      likes: parseEngagementCount(engagementElements.likes?.textContent || '0')
+    };
+
     const metadata: TweetMetadata = {
-      likes,
-      retweets,
-      replies,
-      isVerified,
-      username
+      text: tweetText,
+      username,
+      engagement,
+      element: element as HTMLElement,
+      timestamp: Date.now()
     };
-    
-    return {
-      element,
-      textContent,
-      metadata
-    };
+
+    debugLog('Extracted tweet data:', {
+      username,
+      textLength: tweetText.length,
+      engagement,
+      textPreview: tweetText.substring(0, 100) + '...'
+    });
+
+    return metadata;
   } catch (error) {
-    console.warn('Failed to extract tweet data:', error);
+    console.error('Error extracting tweet data:', error);
     return null;
   }
 }
 
-/**
- * Robust text extraction with multiple strategies
- */
 function extractTweetTextRobust(element: Element): string {
-  // Strategy 1: Primary selector - this is still the main selector for tweet text
-  let textElement = element.querySelector('[data-testid="tweetText"]');
-  if (textElement?.textContent?.trim()) {
-    if (debugMode) {
-      console.log('📝 Text extracted via primary selector [data-testid="tweetText"]');
-    }
-    return textElement.textContent.trim();
-  }
+  let extractedText = '';
+
+  const primarySelector = '[data-testid="tweetText"]';
+  const primaryElement = element.querySelector(primarySelector);
   
-  // Strategy 2: Alternative direct text selectors
-  const directSelectors = [
-    '[data-testid="tweetText"] span',
-    'div[data-testid="tweetText"]',
-    '[lang] span[dir="ltr"]',
-    '[lang] span[dir="auto"]'
+  if (primaryElement?.textContent?.trim()) {
+    extractedText = primaryElement.textContent.trim();
+    debugLog('Strategy 1 success:', extractedText.substring(0, 50));
+    return extractedText;
+  }
+
+  const alternativeSelectors = [
+    '[lang] span',
+    '.css-901oao span',
+    '[dir="auto"] span'
   ];
-  
-  for (const selector of directSelectors) {
-    const found = element.querySelector(selector);
-    const text = found?.textContent?.trim();
-    if (text && text.length > 10) {
-      if (debugMode) {
-        console.log(`📝 Text extracted via selector: ${selector}`);
+
+  for (const selector of alternativeSelectors) {
+    const elements = element.querySelectorAll(selector);
+    const texts = Array.from(elements)
+      .map(el => el.textContent?.trim())
+      .filter(text => text && text.length > 0);
+    
+    if (texts.length > 0) {
+      extractedText = texts.join(' ').trim();
+      if (extractedText.length > 10) {
+        debugLog('Strategy 2 success:', extractedText.substring(0, 50));
+        return extractedText;
       }
-      return text;
     }
   }
-  
-  // Strategy 3: Language-tagged elements (Twitter uses lang attributes)
-  const langElements = element.querySelectorAll('[lang]');
+
+  const langElements = element.querySelectorAll('[lang]:not([lang=""])');
   for (const langEl of Array.from(langElements)) {
     const text = langEl.textContent?.trim();
-    if (text && text.length > 20 && 
-        !text.includes('http') && 
-        !text.includes('@') &&
-        !text.includes('·') &&
-        !text.match(/^\d+[mhsd]$/)) {
-      if (debugMode) {
-        console.log('📝 Text extracted via language-tagged element');
-      }
-      return text;
+    if (text && text.length > extractedText.length) {
+      extractedText = text;
     }
   }
   
-  // Strategy 4: Traverse text nodes and combine meaningful content
-  const textNodes = getAllTextNodes(element);
-  let combinedText = '';
-  
-  for (const node of textNodes) {
-    const text = node.textContent?.trim();
-    if (text && text.length > 5 && 
-        !text.includes('·') && 
-        !text.match(/^\d+[mhs]$/) && 
-        !text.includes('Show this thread') &&
-        !text.includes('Replying to') &&
-        !text.includes('Translate') &&
-        !text.includes('View post analytics')) {
-      combinedText += text + ' ';
-    }
+  if (extractedText.trim().length > 10) {
+    debugLog('Strategy 3 success:', extractedText.substring(0, 50));
+    return extractedText.trim();
   }
-  
-  const result = combinedText.trim();
-  if (debugMode) {
-    console.log(`📝 Text extraction result: "${result.substring(0, 100)}..." (length: ${result.length})`);
+
+  const tweetContainer = element.querySelector('[data-testid="tweet"]') || element;
+  const textNodes = getTextNodesFromElement(tweetContainer);
+  const meaningfulTexts = textNodes
+    .map(node => node.textContent?.trim())
+    .filter(text => text && text.length > 3)
+    .filter(text => !isNavigationText(text));
+
+  if (meaningfulTexts.length > 0) {
+    extractedText = meaningfulTexts.join(' ').trim();
+    debugLog('Strategy 4 success:', extractedText.substring(0, 50));
+    return extractedText;
   }
-  
-  return result;
+
+  debugLog('All strategies failed for element:', element);
+  return '';
 }
 
-/**
- * Get all text nodes within an element
- */
-function getAllTextNodes(element: Element): Text[] {
+function getTextNodesFromElement(element: Element): Text[] {
+  const textNodes: Text[] = [];
   const walker = document.createTreeWalker(
     element,
     NodeFilter.SHOW_TEXT,
-    null
+    {
+      acceptNode: (node) => {
+        const parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        
+        const tagName = parent.tagName.toLowerCase();
+        if (['script', 'style', 'svg'].includes(tagName)) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        
+        const text = node.textContent?.trim();
+        if (!text || text.length < 3) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    }
   );
-  
-  const textNodes: Text[] = [];
+
   let node;
   while (node = walker.nextNode()) {
-    const parent = (node as Text).parentElement;
-    if (!parent) continue;
-    
-    // Skip script, style, and hidden elements
-    if (parent.tagName === 'SCRIPT' || 
-        parent.tagName === 'STYLE' ||
-        parent.hasAttribute('aria-hidden') ||
-        parent.style.display === 'none') {
-      continue;
-    }
-    
     textNodes.push(node as Text);
   }
   
   return textNodes;
 }
 
-/**
- * Extract engagement count for a specific type (like, retweet, reply)
- */
-function extractEngagementCount(element: Element, type: 'like' | 'retweet' | 'reply'): number {
-  try {
-    let selector = '';
-    switch (type) {
-      case 'like':
-        selector = '[data-testid="like"]';
-        break;
-      case 'retweet':
-        selector = '[data-testid="retweet"]';
-        break;
-      case 'reply':
-        selector = '[data-testid="reply"]';
-        break;
-    }
-    
-    const button = element.querySelector(selector);
-    const countElement = button?.querySelector('[data-testid$="count"]');
-    const countText = countElement?.textContent?.trim() || '0';
-    
-    // Handle abbreviated numbers (1.2K, 5.5M, etc.)
-    return parseEngagementNumber(countText);
-  } catch (error) {
-    return 0;
-  }
+function isNavigationText(text: string): boolean {
+  const navPatterns = [
+    /^\d+[hms]$/, /^·$/, /^@/, /^Show this thread$/,
+    /^Replying to/, /^Quote Tweet$/, /^Retweet$/,
+    /^\d+$/, /^Show replies$/, /^More$/
+  ];
+  
+  return navPatterns.some(pattern => pattern.test(text.trim()));
 }
 
-/**
- * Parse engagement numbers that may be abbreviated (1K, 1.2M, etc.)
- */
-function parseEngagementNumber(text: string): number {
-  if (!text || text === '0') return 0;
+function parseEngagementCount(text: string): number {
+  if (!text) return 0;
   
-  const normalized = text.toLowerCase();
-  const number = parseFloat(normalized);
+  const cleanText = text.replace(/[^\d.KMkm]/g, '');
+  const number = parseFloat(cleanText);
   
-  if (normalized.includes('k')) {
-    return Math.floor(number * 1000);
-  } else if (normalized.includes('m')) {
-    return Math.floor(number * 1000000);
-  } else {
-    return Math.floor(number) || 0;
+  if (isNaN(number)) return 0;
+  
+  if (cleanText.toLowerCase().includes('k')) {
+    return Math.round(number * 1000);
+  } else if (cleanText.toLowerCase().includes('m')) {
+    return Math.round(number * 1000000);
   }
+  
+  return Math.round(number);
 }
 
-export function collapseToStub(element: Element): void {
+function collapseToStub(element: HTMLElement): void {
   if (element.hasAttribute('data-slop-collapsed')) {
-    return; // Already collapsed
+    return;
   }
 
-  if (debugMode) {
-    console.log('🎯 Collapsing tweet element:', element);
-  }
-  
-  // Remove any existing collapse headers before storing content
   const existingHeaders = element.querySelectorAll('.slop-collapse-header');
   existingHeaders.forEach(header => header.remove());
-  
-  // Store original content (now clean of collapse headers)
-  element.setAttribute('data-original-content', element.innerHTML);
-  element.setAttribute('data-slop-collapsed', 'true');
-  
-  // Create collapsible stub
-  const stub = document.createElement('div');
-  stub.className = 'slop-collapsed';
-  stub.style.cssText = `
-    background: rgb(247, 249, 250) !important;
-    border: 1px solid rgb(207, 217, 222) !important;
-    border-radius: 16px !important;
-    padding: 12px 16px !important;
-    margin: 2px 0 !important;
-    cursor: pointer !important;
-    transition: background-color 0.2s ease !important;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
-    display: block !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
-  `;
-  
-  stub.innerHTML = `
-    <div class="slop-collapsed-header" style="display: flex !important; align-items: center !important; justify-content: space-between !important; width: 100% !important;">
-      <span class="slop-collapsed-text" style="color: rgb(83, 100, 113) !important; font-size: 15px !important; font-weight: 400 !important; line-height: 20px !important;">AI generated content detected</span>
-      <span class="slop-expand-icon" style="color: rgb(83, 100, 113) !important; font-size: 14px !important; margin-left: 8px !important;">▼</span>
+
+  const originalContent = element.innerHTML;
+  element.setAttribute('data-original-content', originalContent);
+
+  const stubContainer = document.createElement('div');
+  stubContainer.className = 'slop-collapsed';
+  stubContainer.innerHTML = `
+    <div class="slop-collapsed-header">
+      <span class="slop-collapsed-text">AI-generated content hidden</span>
+      <span class="slop-expand-icon">▼</span>
     </div>
   `;
-  
-  // Add hover effect
-  stub.addEventListener('mouseenter', () => {
-    stub.style.background = 'rgb(239, 243, 244) !important';
+
+  stubContainer.addEventListener('mouseenter', () => {
+    stubContainer.style.backgroundColor = 'rgb(239, 243, 244)';
   });
-  
-  stub.addEventListener('mouseleave', () => {
-    stub.style.background = 'rgb(247, 249, 250) !important';
+
+  stubContainer.addEventListener('mouseleave', () => {
+    stubContainer.style.backgroundColor = 'rgb(247, 249, 250)';
   });
-  
-  // Add click handler for expansion
-  stub.addEventListener('click', (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (debugMode) {
-      console.log('🔄 Expanding collapsed tweet');
-    }
+
+  stubContainer.addEventListener('click', () => {
     expandFromStub(element);
   });
-  
-  // Replace content while preserving tweet container structure
-  const htmlElement = element as HTMLElement;
-  htmlElement.innerHTML = '';
-  htmlElement.appendChild(stub);
-  htmlElement.classList.add('slop-tweet-collapsed');
-  
-  // Force display to ensure visibility
-  htmlElement.style.display = 'block';
-  htmlElement.style.visibility = 'visible';
-  
-  console.log('✅ Tweet collapsed successfully, stub element:', stub);
+
+  element.innerHTML = '';
+  element.appendChild(stubContainer);
+  element.setAttribute('data-slop-collapsed', 'true');
+  element.style.display = 'block';
 }
 
-export function expandFromStub(element: Element): void {
+function expandFromStub(element: HTMLElement): void {
   if (!element.hasAttribute('data-slop-collapsed')) {
-    return; // Not collapsed
+    return;
   }
-  
-  console.log('🔄 Expanding tweet element:', element);
-  
-  // Restore original content
+
   const originalContent = element.getAttribute('data-original-content');
   if (originalContent) {
     element.innerHTML = originalContent;
   }
-  
-  // Remove any existing collapse headers before adding new one
+
   const existingHeaders = element.querySelectorAll('.slop-collapse-header');
   existingHeaders.forEach(header => header.remove());
-  
-  // Add collapse header to expanded tweet
+
   const collapseHeader = document.createElement('div');
   collapseHeader.className = 'slop-collapse-header';
-  collapseHeader.style.cssText = `
-    background: rgb(247, 249, 250) !important;
-    border: 1px solid rgb(207, 217, 222) !important;
-    border-radius: 12px !important;
-    padding: 8px 12px !important;
-    margin-bottom: 8px !important;
-    cursor: pointer !important;
-    transition: background-color 0.2s ease !important;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
-    display: block !important;
-  `;
-  
   collapseHeader.innerHTML = `
-    <div class="slop-collapse-button" style="display: flex !important; align-items: center !important; justify-content: space-between !important; width: 100% !important;">
-      <span class="slop-collapse-text" style="color: rgb(83, 100, 113) !important; font-size: 13px !important; font-weight: 400 !important;">Hide AI content</span>
-      <span class="slop-collapse-icon" style="color: rgb(83, 100, 113) !important; font-size: 12px !important; margin-left: 8px !important;">▲</span>
+    <div class="slop-collapse-button">
+      <span class="slop-collapse-text">🤖 Hide AI content</span>
+      <span class="slop-collapse-icon">▲</span>
     </div>
   `;
-  
-  // Add hover effect
+
   collapseHeader.addEventListener('mouseenter', () => {
-    collapseHeader.style.background = 'rgb(239, 243, 244) !important';
+    collapseHeader.style.backgroundColor = 'rgb(239, 243, 244)';
   });
-  
+
   collapseHeader.addEventListener('mouseleave', () => {
-    collapseHeader.style.background = 'rgb(247, 249, 250) !important';
+    collapseHeader.style.backgroundColor = 'rgb(247, 249, 250)';
   });
-  
-  // Add click handler for collapsing
+
   collapseHeader.addEventListener('click', (e) => {
     e.stopPropagation();
-    e.preventDefault();
-    console.log('🎯 Collapsing expanded tweet');
     collapseToStub(element);
   });
-  
-  // Insert collapse header at the top
+
   element.insertBefore(collapseHeader, element.firstChild);
-  element.classList.remove('slop-tweet-collapsed');
-  element.classList.add('slop-tweet-expanded');
   element.removeAttribute('data-slop-collapsed');
-  
-  console.log('✅ Tweet expanded successfully with collapse header');
+  element.removeAttribute('data-original-content');
 }
 
-export function applyTweetEffect(element: Element, effect: 'blur' | 'hide'): void {
-  // Replace blur/hide with collapse effect
-  collapseToStub(element);
+function applyTweetEffect(element: HTMLElement, effectType: 'blur' | 'hide' | 'collapse'): void {
+  hideAllExceptUsername(element);
 }
 
-/**
- * Replace tweet content with "AI tweet hidden" message
- */
-export function replaceWithHiddenMessage(element: Element): void {
-  // Check if already replaced
-  if (element.querySelector('.slop-replacement')) {
-    return;
-  }
-  
-  // Find the main tweet content area
-  const tweetTextElement = element.querySelector('[data-testid="tweetText"]');
-  let contentContainer = tweetTextElement?.parentElement as HTMLElement;
-  
-  // Fallback: find a reasonable container
-  if (!contentContainer) {
-    contentContainer = element.querySelector('[lang]')?.parentElement as HTMLElement;
-  }
-  
-  if (!contentContainer) {
-    // Last resort: create container in the tweet element
-    contentContainer = (element.querySelector('[data-testid="tweet"]') || element) as HTMLElement;
-  }
-  
-  if (!contentContainer) {
-    console.warn('Could not find content container for tweet replacement');
-    return;
-  }
-  
-  // Create replacement content
-  const replacement = document.createElement('div');
-  replacement.className = 'slop-replacement';
-  replacement.style.cssText = `
-    padding: 16px;
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border: 1px solid #dee2e6;
-    border-radius: 12px;
-    text-align: center;
-    margin: 8px 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  `;
-  
-  replacement.innerHTML = `
-    <div style="color: #6c757d; font-size: 14px; font-weight: 500; margin-bottom: 8px;">
-      🤖 AI-generated content hidden
-    </div>
-    <button class="slop-show-button" style="
-      background: #007bff;
-      color: white;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 12px;
-      cursor: pointer;
-      transition: background-color 0.2s;
-    " onmouseover="this.style.backgroundColor='#0056b3'" onmouseout="this.style.backgroundColor='#007bff'">
-      Show anyway
-    </button>
-  `;
-  
-  // Store original content
-  const originalContent = contentContainer.innerHTML;
-  
-  // Add click handler to show button
-  const showButton = replacement.querySelector('.slop-show-button') as HTMLElement;
-  showButton.addEventListener('click', () => {
-    contentContainer.innerHTML = originalContent;
-    contentContainer.style.filter = 'blur(3px)';
-    contentContainer.style.opacity = '0.7';
-    
-    // Add a "hide again" button
-    const hideButton = document.createElement('button');
-    hideButton.textContent = 'Hide again';
-    hideButton.style.cssText = `
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      background: rgba(0,0,0,0.7);
-      color: white;
-      border: none;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 10px;
-      cursor: pointer;
-      z-index: 1000;
-    `;
-    hideButton.addEventListener('click', () => {
-      contentContainer.innerHTML = '';
-      contentContainer.appendChild(replacement);
-      contentContainer.style.filter = '';
-      contentContainer.style.opacity = '';
-    });
-    
-    contentContainer.style.position = 'relative';
-    contentContainer.appendChild(hideButton);
-  });
-  
-  // Replace content
-  contentContainer.innerHTML = '';
-  contentContainer.appendChild(replacement);
-}
+function removeTweetEffect(element: HTMLElement): void {
+  restoreFromUsernameOnly(element);
 
-/**
- * Add visual debug highlighting to processed tweets
- */
-export function addDebugHighlight(element: Element, detected: boolean): void {
-  if (!debugMode) return;
-  
-  const htmlElement = element as HTMLElement;
-  htmlElement.classList.remove('slop-debug-processed', 'slop-debug-detected');
-  
-  if (detected) {
-    htmlElement.classList.add('slop-debug-detected');
-    htmlElement.style.border = '2px solid red';
-    htmlElement.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
-  } else {
-    htmlElement.classList.add('slop-debug-processed');
-    htmlElement.style.border = '1px dashed green';
-  }
-}
+  element.classList.remove('slop-blurred', 'slop-hidden', 'slop-collapsed');
 
-export function removeTweetEffect(element: Element): void {
-  const htmlElement = element as HTMLElement;
-  
-  // Remove collapse effects
+  const collapseHeaders = element.querySelectorAll('.slop-collapse-header');
+  collapseHeaders.forEach(header => header.remove());
+
+  const hideAgainHeaders = element.querySelectorAll('.slop-hide-again-header');
+  hideAgainHeaders.forEach(header => header.remove());
+
+  element.classList.remove('slop-blurred', 'slop-hidden', 'slop-collapsed', 'slop-debug', 'slop-debug-detected', 'slop-debug-processed');
+
+  element.style.filter = '';
+  element.style.opacity = '';
+  element.style.pointerEvents = '';
+  element.style.userSelect = '';
+  element.style.border = '';
+  element.style.borderRadius = '';
+  element.style.outline = '';
+  element.style.backgroundColor = '';
+  element.style.display = '';
+
   if (element.hasAttribute('data-slop-collapsed')) {
     const originalContent = element.getAttribute('data-original-content');
     if (originalContent) {
       element.innerHTML = originalContent;
+      element.removeAttribute('data-original-content');
     }
-    element.removeAttribute('data-original-content');
     element.removeAttribute('data-slop-collapsed');
   }
-  
-  // Remove collapse header from expanded tweets
-  const collapseHeaders = element.querySelectorAll('.slop-collapse-header');
-  collapseHeaders.forEach(header => header.remove());
-  
-  // Remove all slop-related classes
-  htmlElement.classList.remove('slop-tweet-collapsed', 'slop-tweet-expanded', 'slop-blurred', 'slop-hidden');
-  
-  // Reset any forced styles
-  htmlElement.style.display = '';
-  htmlElement.style.visibility = '';
-  
-  console.log('🧹 Removed all tweet effects from element');
+
+  element.removeAttribute('data-slop-username-only');
+  element.removeAttribute('data-slop-original-content');
 }
 
-export function throttle<T extends (...args: any[]) => any>(
-  func: T,
-  limit: number
-): (...args: Parameters<T>) => void {
-  let inThrottle: boolean;
-  return function(this: any, ...args: Parameters<T>) {
-    if (!inThrottle) {
-      func.apply(this, args);
-      inThrottle = true;
-      setTimeout(() => inThrottle = false, limit);
+function addDebugHighlight(element: HTMLElement, detected: boolean): void {
+  if (!DEBUG) return;
+  
+  if (element.hasAttribute('data-slop-processed')) {
+    return;
+  }
+
+  if (detected) {
+    element.classList.add('slop-debug-detected');
+    debugLog('🔴 SLOP DETECTED:', {
+      element,
+      text: element.textContent?.substring(0, 100)
+    });
+  } else {
+    element.classList.add('slop-debug-processed');
+    debugLog('🟢 Clean tweet processed:', {
+      element,
+      text: element.textContent?.substring(0, 50)
+    });
+  }
+
+  element.setAttribute('data-slop-processed', 'true');
+}
+
+function hideAllExceptUsername(element: HTMLElement): void {
+  if (element.hasAttribute('data-slop-username-only')) {
+    return;
+  }
+
+  const usernameInfo = extractUsernameInfo(element);
+  if (!usernameInfo.displayName && !usernameInfo.handle) {
+    debugLog('Could not extract username, falling back to collapse');
+    collapseToStub(element);
+    return;
+  }
+
+  const existingHeaders = element.querySelectorAll('.slop-hide-again-header');
+  existingHeaders.forEach(header => header.remove());
+
+  const originalContent = element.innerHTML;
+  element.setAttribute('data-slop-original-content', originalContent);
+
+  const usernameContainer = document.createElement('div');
+  usernameContainer.className = 'slop-username-display';
+  usernameContainer.style.cssText = `
+    background: rgb(247, 249, 250);
+    border: 1px solid rgb(207, 217, 222);
+    border-radius: 16px;
+    padding: 16px;
+    margin: 2px 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  `;
+
+  usernameContainer.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-weight: 700; color: rgb(15, 20, 25); font-size: 15px;">${usernameInfo.displayName || 'User'}</span>
+        ${usernameInfo.handle ? `<span style="color: rgb(83, 100, 113); font-size: 15px;">@${usernameInfo.handle}</span>` : ''}
+      </div>
+      <div style="color: rgb(83, 100, 113); font-size: 15px; margin: 4px 0;">
+        Content hidden by Slop Block
+      </div>
+      <button class="slop-show-content" style="
+        background: rgb(29, 161, 242);
+        color: white;
+        border: none;
+        border-radius: 20px;
+        padding: 8px 16px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+        align-self: flex-start;
+      ">Show</button>
+    </div>
+  `;
+
+  usernameContainer.addEventListener('mouseenter', () => {
+    usernameContainer.style.backgroundColor = 'rgb(239, 243, 244)';
+  });
+
+  usernameContainer.addEventListener('mouseleave', () => {
+    usernameContainer.style.backgroundColor = 'rgb(247, 249, 250)';
+  });
+
+  const showButton = usernameContainer.querySelector('.slop-show-content') as HTMLButtonElement;
+  showButton?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    restoreFromUsernameOnly(element);
+  });
+
+  element.innerHTML = '';
+  element.appendChild(usernameContainer);
+  element.setAttribute('data-slop-username-only', 'true');
+  element.style.display = 'block';
+}
+
+function extractUsernameInfo(element: HTMLElement): { displayName: string | null, handle: string | null } {
+  const userNameElement = element.querySelector('[data-testid="User-Name"]');
+  
+  let displayName: string | null = null;
+  let handle: string | null = null;
+
+  if (userNameElement) {
+    const nameSpans = userNameElement.querySelectorAll('span');
+    for (const span of Array.from(nameSpans)) {
+      const text = span.textContent?.trim();
+      if (text) {
+        if (text.startsWith('@')) {
+          handle = text.substring(1);
+        } else if (!displayName && !text.includes('@')) {
+          displayName = text;
+        }
+      }
     }
-  };
+  }
+
+  return { displayName, handle };
 }
 
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  delay: number
-): (...args: Parameters<T>) => void {
-  let timeoutId: number;
-  return function(this: any, ...args: Parameters<T>) {
-    clearTimeout(timeoutId);
-    timeoutId = window.setTimeout(() => func.apply(this, args), delay);
-  };
-} 
+function restoreFromUsernameOnly(element: HTMLElement): void {
+  if (!element.hasAttribute('data-slop-username-only')) {
+    return;
+  }
+
+  const originalContent = element.getAttribute('data-slop-original-content');
+  if (originalContent) {
+    element.innerHTML = originalContent;
+  }
+
+  const existingHeaders = element.querySelectorAll('.slop-hide-again-header');
+  existingHeaders.forEach(header => header.remove());
+
+  const hideAgainHeader = document.createElement('div');
+  hideAgainHeader.className = 'slop-hide-again-header';
+  hideAgainHeader.style.cssText = `
+    background: rgb(247, 249, 250);
+    border: 1px solid rgb(207, 217, 222);
+    border-radius: 12px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  `;
+
+  hideAgainHeader.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+      <span style="color: rgb(83, 100, 113); font-size: 13px; font-weight: 400;">🤖 Hide AI content again</span>
+      <span style="color: rgb(83, 100, 113); font-size: 12px; margin-left: 8px; transition: transform 0.2s ease;">▲</span>
+    </div>
+  `;
+
+  hideAgainHeader.addEventListener('mouseenter', () => {
+    hideAgainHeader.style.backgroundColor = 'rgb(239, 243, 244)';
+  });
+
+  hideAgainHeader.addEventListener('mouseleave', () => {
+    hideAgainHeader.style.backgroundColor = 'rgb(247, 249, 250)';
+  });
+
+  hideAgainHeader.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hideAllExceptUsername(element);
+  });
+
+  element.insertBefore(hideAgainHeader, element.firstChild);
+  element.removeAttribute('data-slop-username-only');
+  element.removeAttribute('data-slop-original-content');
+}
+
+export { 
+  getTweetElements, 
+  extractTweetData, 
+  applyTweetEffect, 
+  removeTweetEffect, 
+  addDebugHighlight,
+  hideAllExceptUsername,
+  restoreFromUsernameOnly,
+  type TweetMetadata 
+}; 

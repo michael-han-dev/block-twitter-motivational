@@ -1,9 +1,6 @@
 import { getStorageValue, setStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '../utils/storage';
 
-/**
- * Background service worker for Slop Block extension
- * Handles toolbar toggle, state management, and icon updates
- */
+
 
 const ICONS = {
   ENABLED: {

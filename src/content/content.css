@@ -1,7 +1,4 @@
-/**
- * Slop Block Extension - Content Styles
- * CSS utilities for hiding and blurring detected slop content
- */
+
 
 .slop-hidden {
   display: none !important;
@@ -21,25 +18,25 @@
   pointer-events: auto !important;
 }
 
-/* Optional: Add a subtle border to indicate processed content */
+
 .slop-blurred {
   border: 1px solid rgba(255, 0, 0, 0.1) !important;
   border-radius: 8px !important;
 }
 
-/* Ensure transitions work smoothly with Twitter's existing styles */
+
 [data-testid="tweet"].slop-blurred,
 [data-testid="tweet"].slop-hidden {
   will-change: filter, opacity !important;
 }
 
-/* For debugging: highlight detected tweets in development */
+
 .slop-debug {
   outline: 2px dashed orange !important;
   outline-offset: 2px !important;
 }
 
-/* Ensure interactive elements are properly handled */
+
 .slop-blurred button,
 .slop-blurred a,
 .slop-blurred [role="button"] {
@@ -52,12 +49,12 @@
   pointer-events: auto !important;
 }
 
-/* Collapsible tweet effects - Twitter native styling */
+
 .slop-collapsed {
   background: rgb(247, 249, 250);
   border: 1px solid rgb(207, 217, 222);
   border-radius: 16px;
-  padding: 12px 16px;
+  padding: 5px 8px;
   margin: 2px 0;
   cursor: pointer;
   transition: background-color 0.2s ease;
@@ -140,23 +137,7 @@
   transition: all 0.3s ease;
 }
 
-/* Legacy blur/hide effects (kept for backward compatibility) */
-.slop-hidden {
-  display: none !important;
-}
 
-.slop-blurred {
-  filter: blur(5px) !important;
-  opacity: 0.3 !important;
-  transition: filter 0.3s ease, opacity 0.3s ease !important;
-}
-
-.slop-blurred:hover {
-  filter: blur(1px) !important;
-  opacity: 0.7 !important;
-}
-
-/* Debug highlighting */
 .slop-debug-detected {
   outline: 2px solid red !important;
   outline-offset: 2px !important;
@@ -165,4 +146,6 @@
 .slop-debug-processed {
   outline: 2px dashed green !important;
   outline-offset: 2px !important;
-} 
+}
+
+ 

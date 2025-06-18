@@ -1,68 +1,121 @@
 import { getStorageValue, setStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '../utils/storage';
 
-class PopupController {
-  private toggleSwitch: HTMLInputElement;
+interface UIElements {
+  statusText: HTMLElement;
+  toggleButton: HTMLElement;
+  settingsButton: HTMLElement;
+  mainView: HTMLElement;
+  settingsView: HTMLElement;
+  backButton: HTMLElement;
+  apiKeyInput: HTMLInputElement;
+  saveApiKeyButton: HTMLElement;
+  customPromptInput: HTMLTextAreaElement;
+  savePromptButton: HTMLElement;
+}
 
-  constructor() {
-    this.toggleSwitch = document.getElementById('toggleSwitch') as HTMLInputElement;
-    this.initialize();
-  }
+let elements: UIElements;
 
-  private async initialize(): Promise<void> {
-    await this.loadCurrentState();
-    this.setupEventListeners();
-  }
+function getUIElements(): UIElements {
+  return {
+    statusText: document.getElementById('statusText')!,
+    toggleButton: document.getElementById('toggleButton')!,
+    settingsButton: document.getElementById('settingsButton')!,
+    mainView: document.getElementById('mainView')!,
+    settingsView: document.getElementById('settingsView')!,
+    backButton: document.getElementById('backButton')!,
+    apiKeyInput: document.getElementById('apiKeyInput') as HTMLInputElement,
+    saveApiKeyButton: document.getElementById('saveApiKeyButton')!,
+    customPromptInput: document.getElementById('customPromptInput') as HTMLTextAreaElement,
+    savePromptButton: document.getElementById('savePromptButton')!
+  };
+}
 
-  private async loadCurrentState(): Promise<void> {
-    try {
-      console.log('🔍 Popup loading current state from storage...');
-      const isEnabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);
-      console.log('📊 Current state from storage:', isEnabled);
-      this.toggleSwitch.checked = isEnabled;
-      console.log('✅ Toggle switch updated to:', isEnabled);
-    } catch (error) {
-      console.error('❌ Failed to load current state:', error);
-    }
-  }
-
-  private setupEventListeners(): void {
-    this.toggleSwitch.addEventListener('change', async () => {
-      await this.handleToggleChange();
-    });
-  }
-
-  private async handleToggleChange(): Promise<void> {
-    try {
-      const newState = this.toggleSwitch.checked;
-      console.log('🔄 Toggle changed to:', newState);
-      
-      console.log('💾 Saving new state to storage...');
-      await setStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, newState);
-      console.log('✅ State saved to storage');
-      
-      try {
-        console.log('📡 Notifying background script...');
-        await chrome.runtime.sendMessage({
+async function updateToggleButton(enabled: boolean): Promise<void> {
+  elements.toggleButton.classList.toggle('enabled', enabled);
+  elements.statusText.textContent = enabled ? 'Enabled' : 'Disabled';
+  
+  try {
+    await setStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, enabled);
+    
+    chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+      if (tabs[0]?.id) {
+        chrome.tabs.sendMessage(tabs[0].id, {
           action: 'stateChanged',
-          enabled: newState
-        });
-        console.log('✅ Background script notified');
-      } catch (error) {
-        console.log('⚠️ Background script not ready:', error);
+          enabled: enabled
+        }).catch(() => {});
       }
-      
-    } catch (error) {
-      console.error('❌ Failed to handle toggle change:', error);
-      this.toggleSwitch.checked = !this.toggleSwitch.checked;
-    }
-  }
-
-  private isTwitterTab(url?: string): boolean {
-    if (!url) return false;
-    return url.includes('twitter.com') || url.includes('x.com');
+    });
+  } catch (error) {
+    console.error('Error updating toggle state:', error);
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  new PopupController();
-}); 
+function showMainView(): void {
+  elements.mainView.style.display = 'block';
+  elements.settingsView.style.display = 'none';
+}
+
+function showSettingsView(): void {
+  elements.mainView.style.display = 'none';
+  elements.settingsView.style.display = 'block';
+}
+
+async function saveApiKey(): Promise<void> {
+  const apiKey = elements.apiKeyInput.value.trim();
+  if (apiKey) {
+    await setStorageValue(STORAGE_KEYS.OPENROUTER_API_KEY, apiKey);
+    elements.saveApiKeyButton.textContent = 'Saved!';
+    setTimeout(() => {
+      elements.saveApiKeyButton.textContent = 'Save';
+    }, 2000);
+  }
+}
+
+async function saveCustomPrompt(): Promise<void> {
+  const customPrompt = elements.customPromptInput.value.trim();
+  if (customPrompt) {
+    await setStorageValue(STORAGE_KEYS.CUSTOM_PROMPT, customPrompt);
+    elements.savePromptButton.textContent = 'Saved!';
+    setTimeout(() => {
+      elements.savePromptButton.textContent = 'Save';
+    }, 2000);
+  }
+}
+
+async function loadSettings(): Promise<void> {
+  const apiKey = await getStorageValue(STORAGE_KEYS.OPENROUTER_API_KEY, '');
+  const customPrompt = await getStorageValue(STORAGE_KEYS.CUSTOM_PROMPT, '');
+  
+  elements.apiKeyInput.value = apiKey;
+  elements.customPromptInput.value = customPrompt;
+}
+
+async function initializePopup(): Promise<void> {
+  elements = getUIElements();
+  
+  const enabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);
+  
+  await loadSettings();
+  
+  elements.toggleButton.classList.toggle('enabled', enabled);
+  elements.statusText.textContent = enabled ? 'Enabled' : 'Disabled';
+
+  elements.toggleButton.addEventListener('click', async () => {
+    const currentEnabled = elements.toggleButton.classList.contains('enabled');
+    const newEnabled = !currentEnabled;
+    await updateToggleButton(newEnabled);
+  });
+
+  elements.settingsButton.addEventListener('click', () => {
+    showSettingsView();
+  });
+
+  elements.backButton.addEventListener('click', () => {
+    showMainView();
+  });
+
+  elements.saveApiKeyButton.addEventListener('click', saveApiKey);
+  elements.savePromptButton.addEventListener('click', saveCustomPrompt);
+}
+
+document.addEventListener('DOMContentLoaded', initializePopup); 

@@ -28,12 +28,16 @@ export const STORAGE_KEYS = {
   SLOP_BLOCK_ENABLED: 'slopBlockEnabled',
   DETECTION_COUNT: 'detectionCount',
   USER_WHITELIST: 'userWhitelist',
-  BLUR_MODE: 'blurMode'
+  BLUR_MODE: 'blurMode',
+  OPENROUTER_API_KEY: 'openRouterApiKey',
+  CUSTOM_PROMPT: 'customPrompt'
 } as const;
 
 export const DEFAULT_VALUES = {
   [STORAGE_KEYS.SLOP_BLOCK_ENABLED]: false,
   [STORAGE_KEYS.DETECTION_COUNT]: 0,
   [STORAGE_KEYS.USER_WHITELIST]: [] as string[],
-  [STORAGE_KEYS.BLUR_MODE]: true
+  [STORAGE_KEYS.BLUR_MODE]: true,
+  [STORAGE_KEYS.OPENROUTER_API_KEY]: '',
+  [STORAGE_KEYS.CUSTOM_PROMPT]: ''
 } as const; 
