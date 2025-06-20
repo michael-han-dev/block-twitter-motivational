@@ -10,8 +10,7 @@ export interface LLMAnalysisResult {
 }
 
 export async function analyzeTweetsWithLLM(
-  tweets: string[],
-  useGroq: boolean = true
+  tweets: string[]
 ): Promise<LLMAnalysisResult[] | null> {
   if (tweets.length === 0) return [];
   
@@ -53,10 +52,6 @@ ${tweets.map((tweet, i) => `${i}: ${tweet}`).join('\n\n')}`;
     messages,
     response_format: { type: 'json_object' }
   };
-
-  if (useGroq) {
-    body.provider = { order: ['groq'] };
-  }
 
   try {
     console.log('[OpenRouter] Sending request with', tweets.length, 'tweets');

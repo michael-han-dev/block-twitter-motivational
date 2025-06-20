@@ -41,10 +41,7 @@ async function analyseBatch(batch: TweetInfo[]): Promise<Set<string>> {
   console.log('[Batch] Tweet texts being sent:', texts);
   
   try {
-    const useGroq = await getStorageValue(STORAGE_KEYS.USE_GROQ, true);
-    console.log('[Batch] Using Groq:', useGroq);
-
-    const results = await analyzeTweetsWithLLM(texts, useGroq);
+    const results = await analyzeTweetsWithLLM(texts);
     console.log('[Batch] OpenRouter returned:', results);
     
     if (!results) {
