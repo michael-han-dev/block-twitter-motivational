@@ -13,6 +13,7 @@ const DROP_COUNT = 10;
 const BATCH_SIZE = 15;
 
 let processed: string[] = [];
+let collapsedTweetIds: string[] = [];
 let queue: TweetInfo[] = [];
 const elementMap = new Map<string, HTMLElement>();
 let isEnabled = false;
@@ -24,6 +25,29 @@ async function loadProcessed() {
 
 async function saveProcessed() {
   await setLocalStorageValue(STORAGE_KEYS.PROCESSED_TWEET_IDS, processed);
+}
+
+async function loadCollapsedTweets() {
+  collapsedTweetIds = await getLocalStorageValue<string[]>(STORAGE_KEYS.COLLAPSED_TWEET_IDS, []);
+  console.log('[Collapsed] Loaded', collapsedTweetIds.length, 'previously collapsed tweet IDs');
+}
+
+async function saveCollapsedTweets() {
+  await setLocalStorageValue(STORAGE_KEYS.COLLAPSED_TWEET_IDS, collapsedTweetIds);
+}
+
+function addCollapsedTweet(id: string) {
+  if (!collapsedTweetIds.includes(id)) {
+    collapsedTweetIds.push(id);
+    // Keep only recent collapsed tweets to avoid memory issues
+    if (collapsedTweetIds.length > MAX_TWEETS) {
+      collapsedTweetIds.splice(0, DROP_COUNT);
+    }
+    
+    if (chrome?.runtime?.id) {
+      saveCollapsedTweets();
+    }
+  }
 }
 
 function addProcessed(id: string) {
@@ -76,6 +100,7 @@ function handleFlags(flags: Set<string>) {
     const el = elementMap.get(id);
     if (el) {
       collapseAITweet(el);
+      addCollapsedTweet(id);
       console.log('[Collapsed AI Tweet]', id);
     }
   });
@@ -94,15 +119,29 @@ function processTweet(el: HTMLElement) {
   const data = extractTweetData(el);
   if (!data) return;
   const { id, text } = data;
-  if (!id || processed.includes(id)) return;
+  if (!id) return;
+  
+  // Always update the element map for tweet ID tracking
+  elementMap.set(id, el);
+  
+  // Check if this tweet was previously collapsed and re-collapse it
+  if (collapsedTweetIds.includes(id)) {
+    if (!el.hasAttribute('data-ai-collapsed')) {
+      collapseAITweet(el);
+      console.log('[Re-collapsed Previously Flagged Tweet]', id);
+    }
+    return;
+  }
+  
+  // Skip if already processed for analysis
+  if (processed.includes(id)) return;
 
   console.log('[Tweet]', id, text.substring(0, 120));
 
   addProcessed(id);
   queue.push({ id, text, element: el });
-  elementMap.set(id, el);
   flushQueue();
-    }
+}
 
 function initialScan() {
   if (!isEnabled) return;
@@ -139,16 +178,31 @@ function stopObserver() {
   }
 }
 
+function removeFromCollapsed(tweetId: string) {
+  const index = collapsedTweetIds.indexOf(tweetId);
+  if (index !== -1) {
+    collapsedTweetIds.splice(index, 1);
+    console.log('[Manual Expansion] Removed tweet from collapsed list:', tweetId);
+    if (chrome?.runtime?.id) {
+      saveCollapsedTweets();
+    }
+  }
+}
+
 async function updateExtensionState() {
   const enabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, false);
   console.log('[Extension] State changed to:', enabled ? 'ENABLED' : 'DISABLED');
   
   if (enabled && !isEnabled) {
     isEnabled = true;
+    // Set up callback for manual tweet expansions
+    window.slopBlockRemoveFromCollapsed = removeFromCollapsed;
     startObserver();
     initialScan();
   } else if (!enabled && isEnabled) {
     isEnabled = false;
+    // Remove callback
+    window.slopBlockRemoveFromCollapsed = undefined;
     stopObserver();
     queue.length = 0;
   }
@@ -162,5 +216,6 @@ chrome.runtime.onMessage.addListener((message) => {
 
 (async () => {
   await loadProcessed();
+  await loadCollapsedTweets();
   await updateExtensionState();
 })();

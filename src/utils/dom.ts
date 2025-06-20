@@ -1,10 +1,9 @@
-
-
 import { TweetMetadata } from './storage';
 
 declare global {
   interface Window {
     DEBUG_SLOP_DETECTION?: boolean;
+    slopBlockRemoveFromCollapsed?: (tweetId: string) => void;
   }
 }
 
@@ -157,7 +156,7 @@ function extractTweetTextRobust(element: Element): string {
   const textNodes = getTextNodesFromElement(tweetContainer);
   const meaningfulTexts = textNodes
     .map(node => node.textContent?.trim())
-    .filter(text => text && text.length > 3)
+    .filter((text): text is string => text !== undefined && text.length > 3)
     .filter(text => !isNavigationText(text));
 
   if (meaningfulTexts.length > 0) {
@@ -325,6 +324,11 @@ function expandAITweet(element: HTMLElement): void {
     return;
   }
 
+  const tweetId = extractTweetId(element);
+  if (tweetId && window.slopBlockRemoveFromCollapsed) {
+    window.slopBlockRemoveFromCollapsed(tweetId);
+  }
+
   const originalContent = element.getAttribute('data-ai-original-content');
   if (originalContent) {
     element.innerHTML = originalContent;
@@ -375,6 +379,11 @@ function expandAITweet(element: HTMLElement): void {
 function expandFromStub(element: HTMLElement): void {
   if (!element.hasAttribute('data-slop-collapsed')) {
     return;
+  }
+
+  const tweetId = extractTweetId(element);
+  if (tweetId && window.slopBlockRemoveFromCollapsed) {
+    window.slopBlockRemoveFromCollapsed(tweetId);
   }
 
   const originalContent = element.getAttribute('data-original-content');

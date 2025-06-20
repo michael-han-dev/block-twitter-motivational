@@ -58,6 +58,7 @@ export const STORAGE_KEYS = {
   CUSTOM_PROMPT: 'customPrompt',
   PROCESSED_TWEET_IDS: 'processedTweetIds',
   LLM_ANALYZED_IDS: 'llmAnalyzedIds',
+  COLLAPSED_TWEET_IDS: 'collapsedTweetIds',
 } as const;
 
 export const DEFAULT_VALUES = {
@@ -72,6 +73,7 @@ export const DEFAULT_VALUES = {
   [STORAGE_KEYS.CUSTOM_PROMPT]: '',
   [STORAGE_KEYS.PROCESSED_TWEET_IDS]: [] as string[],
   [STORAGE_KEYS.LLM_ANALYZED_IDS]: [] as string[],
+  [STORAGE_KEYS.COLLAPSED_TWEET_IDS]: [] as string[],
 } as const;
 
 
