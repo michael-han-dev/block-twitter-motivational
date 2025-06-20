@@ -11,6 +11,7 @@
       font-size: 14px;
       background: #fff;
       color: #09090b;
+      box-sizing: border-box;
     }
     
     .container {
@@ -19,6 +20,8 @@
       align-items: center;
       gap: 16px;
       text-align: center;
+      width: 100%;
+      box-sizing: border-box;
     }
     
     .status-header {
@@ -72,7 +75,10 @@
     .toggle-container {
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 12px;
+      width: 100%;
+      box-sizing: border-box;
     }
     
     .toggle {
@@ -131,6 +137,7 @@
 
     .settings-view {
       width: 100%;
+      box-sizing: border-box;
     }
 
     .settings-header {
@@ -262,6 +269,11 @@
     .submit-button:hover {
       background: #18181b;
     }
+
+    .submit-button:disabled {
+      background: #d4d4d8;
+      cursor: default;
+    }
   </style>
 </head>
 <body>
@@ -269,6 +281,7 @@
   <div class="container" id="mainView">
     <div class="status-header">
       <h1 class="status-text" id="statusText">Disabled</h1>
+      <span id="llmCountBadge" style="margin-left:8px;background:#ef4444;color:#fff;font-size:11px;border-radius:10px;padding:2px 6px;display:none"></span>
       <div class="settings-button-wrapper">
         <button class="settings-button" id="settingsButton" title="Settings">
           <svg class="settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -313,10 +326,11 @@
           </svg>
           <h2 class="section-title">OpenRouter API Key</h2>
         </div>
-        <input type="text" class="input-field" id="apiKeyInput" placeholder="Enter your OpenRouter API key"/>
+        <input type="text" class="input-field" id="apiKeyInput" placeholder="sk-or-v1 ----"/>
         <button class="submit-button" id="submitApiKey">Submit API Key</button>
       </div>
       
+
       <div class="settings-section">
         <div class="section-header">
           <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

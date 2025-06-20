@@ -1,6 +1,4 @@
-/**
- * DOM manipulation utilities for Twitter/X content detection and modification
- */
+
 
 import { TweetMetadata } from './storage';
 
@@ -40,8 +38,29 @@ function getTweetElements(): Element[] {
   });
 }
 
+function extractTweetId(element: HTMLElement): string | null {
+  const links = element.querySelectorAll('a[href*="/status/"]');
+  for (const link of Array.from(links)) {
+    const href = (link as HTMLAnchorElement).href;
+    const match = href.match(/\/status\/(\d+)/);
+    if (match && match[1]) return match[1];
+  }
+  return null;
+}
+
+function fallbackHash(content: string): string {
+  let hash = 0;
+  for (let i = 0; i < content.length; i++) {
+    hash = ((hash << 5) - hash) + content.charCodeAt(i);
+    hash |= 0;
+  }
+  return 'h' + Math.abs(hash);
+}
+
 function extractTweetData(element: Element): TweetMetadata | null {
   try {
+    const id = extractTweetId(element as HTMLElement);
+
     const tweetText = extractTweetTextRobust(element);
     if (!tweetText) {
       debugLog('No text extracted for tweet:', element);
@@ -66,6 +85,7 @@ function extractTweetData(element: Element): TweetMetadata | null {
     };
 
     const metadata: TweetMetadata = {
+      id: id || fallbackHash(tweetText),
       text: tweetText,
       username,
       engagement,
@@ -246,6 +266,110 @@ function collapseToStub(element: HTMLElement): void {
   element.appendChild(stubContainer);
   element.setAttribute('data-slop-collapsed', 'true');
   element.style.display = 'block';
+}
+
+function collapseAITweet(element: HTMLElement): void {
+  if (element.hasAttribute('data-ai-collapsed')) {
+    return;
+  }
+
+  const existingBars = element.querySelectorAll('.ai-tweet-bar');
+  existingBars.forEach(bar => bar.remove());
+
+  const originalContent = element.innerHTML;
+  element.setAttribute('data-ai-original-content', originalContent);
+
+  const aiBar = document.createElement('div');
+  aiBar.className = 'ai-tweet-bar';
+  aiBar.style.cssText = `
+    background: white;
+    border: 1px solid #e1e8ed;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin: 4px 0;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 20px;
+  `;
+
+  aiBar.innerHTML = `
+    <span style="color: #657786; font-size: 13px; font-weight: 400;">ai tweet hidden</span>
+    <span style="color: #657786; font-size: 12px;">▼</span>
+  `;
+
+  aiBar.addEventListener('mouseenter', () => {
+    aiBar.style.backgroundColor = '#f7f9fa';
+  });
+
+  aiBar.addEventListener('mouseleave', () => {
+    aiBar.style.backgroundColor = 'white';
+  });
+
+  aiBar.addEventListener('click', (e) => {
+    e.stopPropagation();
+    expandAITweet(element);
+  });
+
+  element.innerHTML = '';
+  element.appendChild(aiBar);
+  element.setAttribute('data-ai-collapsed', 'true');
+  element.style.display = 'block';
+}
+
+function expandAITweet(element: HTMLElement): void {
+  if (!element.hasAttribute('data-ai-collapsed')) {
+    return;
+  }
+
+  const originalContent = element.getAttribute('data-ai-original-content');
+  if (originalContent) {
+    element.innerHTML = originalContent;
+  }
+
+  const existingHeaders = element.querySelectorAll('.ai-hide-header');
+  existingHeaders.forEach(header => header.remove());
+
+  const hideHeader = document.createElement('div');
+  hideHeader.className = 'ai-hide-header';
+  hideHeader.style.cssText = `
+    background: white;
+    border: 1px solid #e1e8ed;
+    border-radius: 8px;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  `;
+
+  hideHeader.innerHTML = `
+    <span style="color: #657786; font-size: 13px; font-weight: 400;">🤖 hide ai tweet</span>
+    <span style="color: #657786; font-size: 12px;">▲</span>
+  `;
+
+  hideHeader.addEventListener('mouseenter', () => {
+    hideHeader.style.backgroundColor = '#f7f9fa';
+  });
+
+  hideHeader.addEventListener('mouseleave', () => {
+    hideHeader.style.backgroundColor = 'white';
+  });
+
+  hideHeader.addEventListener('click', (e) => {
+    e.stopPropagation();
+    collapseAITweet(element);
+  });
+
+  element.insertBefore(hideHeader, element.firstChild);
+  element.removeAttribute('data-ai-collapsed');
+  element.removeAttribute('data-ai-original-content');
 }
 
 function expandFromStub(element: HTMLElement): void {
@@ -507,5 +631,7 @@ export {
   addDebugHighlight,
   hideAllExceptUsername,
   restoreFromUsernameOnly,
+  collapseAITweet,
+  expandAITweet,
   type TweetMetadata 
 }; 

@@ -38,7 +38,6 @@ const buildOptions = {
   format: 'iife',
   sourcemap: isDev,
   minify: !isDev,
-  drop: isDev ? [] : ['console'],
   define: {
     'process.env.NODE_ENV': isDev ? '"development"' : '"production"',
     'DEBUG': isDev ? 'true' : 'false'

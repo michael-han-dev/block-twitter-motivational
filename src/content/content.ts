@@ -1,294 +1,169 @@
-import { getStorageValue, setStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '../utils/storage';
-import { getTweetElements, extractTweetData, applyTweetEffect, removeTweetEffect, addDebugHighlight } from '../utils/dom';
-import { analyzeTweet } from '../rules/rules';
+console.log('🔍 SlopBlock: Script loaded at', new Date().toISOString());
+console.log('🔍 SlopBlock: URL:', window.location.href);
+console.log('🔍 SlopBlock: Document ready state:', document.readyState);
 
+import { getLocalStorageValue, setLocalStorageValue, getStorageValue, STORAGE_KEYS } from '../utils/storage';
+import { getTweetElements, extractTweetData, collapseAITweet } from '../utils/dom';
+import { analyzeTweetsWithLLM } from '../utils/openrouter';
+
+type TweetInfo = { id: string; text: string; element: HTMLElement };
+
+const MAX_TWEETS = 200;
+const DROP_COUNT = 10;
+const BATCH_SIZE = 15;
+
+let processed: string[] = [];
+let queue: TweetInfo[] = [];
+const elementMap = new Map<string, HTMLElement>();
 let isEnabled = false;
-let processingQueue: Element[] = [];
-let isProcessingQueue = false;
 let observer: MutationObserver | null = null;
-let loadCheckInterval: number | null = null;
-let navigationTimeout: number | null = null;
 
-function log(...args: any[]): void {
-  console.log('[SlopBlock Content]', ...args);
+async function loadProcessed() {
+  processed = await getLocalStorageValue<string[]>(STORAGE_KEYS.PROCESSED_TWEET_IDS, []);
 }
 
-function isTwitterLoaded(): boolean {
-  return document.querySelectorAll('[data-testid="tweet"]').length > 0;
+async function saveProcessed() {
+  await setLocalStorageValue(STORAGE_KEYS.PROCESSED_TWEET_IDS, processed);
 }
 
-function startLoadCheck(): void {
-  if (loadCheckInterval) {
-    clearInterval(loadCheckInterval);
-  }
+function addProcessed(id: string) {
+  processed.push(id);
+  if (processed.length > MAX_TWEETS) processed.splice(0, DROP_COUNT);
   
-  loadCheckInterval = window.setInterval(() => {
-    log('⏳ Checking if Twitter is loaded...');
-    if (isTwitterLoaded()) {
-      log('✅ Twitter loaded, starting slop detection');
-      clearInterval(loadCheckInterval!);
-      loadCheckInterval = null;
-      
-      if (isEnabled) {
-        initializeSlop();
-      }
-    }
-  }, 1000);
-}
-
-function debugLog(...args: any[]): void {
-  if (window.location.hash.includes('slopDebug')) {
-    console.log('[SlopBlock Debug]', ...args);
+  if (chrome?.runtime?.id) {
+    saveProcessed();
   }
 }
 
-function addToProcessingQueue(element: Element): void {
-  if (!processingQueue.includes(element)) {
-    processingQueue.push(element);
-  }
+async function analyseBatch(batch: TweetInfo[]): Promise<Set<string>> {
+  const texts = batch.map(t => t.text);
+  console.log('[Batch] Analyzing', batch.length, 'tweets with OpenRouter...');
+  console.log('[Batch] Tweet texts being sent:', texts);
   
-  if (!isProcessingQueue) {
-    scheduleQueueProcessing();
-  }
-}
-
-function scheduleQueueProcessing(): void {
-  if (isProcessingQueue) return;
-  
-  isProcessingQueue = true;
-  setTimeout(() => {
-    processQueue();
-    isProcessingQueue = false;
-  }, 200);
-}
-
-function processQueue(): void {
-  if (processingQueue.length === 0) return;
-  
-  log(`📦 Processing queue of ${processingQueue.length} elements`);
-  
-  const currentQueue = [...processingQueue];
-  processingQueue = [];
-  
-  currentQueue.forEach(element => {
-    if (document.contains(element)) {
-      processTweet(element as HTMLElement);
-    }
-  });
-}
-
-function initializeSlop(): void {
-  if (!isEnabled) {
-    log('❌ Slop detection disabled, skipping initialization');
-    return;
-  }
-
-  log('🚀 Initializing slop detection system...');
-  
-  startObserver();
-  
-  setTimeout(() => {
-    processTweets();
-  }, 500);
-}
-
-function processTweets(): void {
-  log('🔍 Scanning for tweets...');
-  
-  const tweets = getTweetElements();
-  log(`📊 Found ${tweets.length} unprocessed tweets`);
-  
-  tweets.forEach(element => {
-    addToProcessingQueue(element);
-  });
-}
-
-function processTweet(element: HTMLElement): void {
   try {
-    const tweet = extractTweetData(element);
-    if (!tweet) {
-      debugLog('❌ Could not extract tweet data from element:', element);
-      return;
-    }
-
-    debugLog('📝 Processing tweet:', {
-      username: tweet.username,
-      textLength: tweet.text.length,
-      textPreview: tweet.text.substring(0, 100)
-    });
-
-    const analysis = analyzeTweet(tweet);
+    const useGroq = await getStorageValue(STORAGE_KEYS.USE_GROQ, true);
+    console.log('[Batch] Using Groq:', useGroq);
     
-    debugLog('🎯 Analysis result:', {
-      isSlop: analysis.isSlop,
-      confidence: analysis.confidence,
-      reasons: analysis.reasons
-    });
-
-    if (analysis.isSlop) {
-      log(`🚫 SLOP DETECTED (confidence: ${(analysis.confidence * 100).toFixed(1)}%):`, {
-        username: tweet.username,
-        reasons: analysis.reasons,
-        text: tweet.text.substring(0, 100) + '...'
-      });
-      
-      applyTweetEffect(tweet.element, 'hide');
+    const results = await analyzeTweetsWithLLM(texts, useGroq);
+    console.log('[Batch] OpenRouter returned:', results);
+    
+    if (!results) {
+      console.log('[Batch] No API key or analysis failed');
+      return new Set<string>();
     }
-
-    addDebugHighlight(tweet.element, analysis.isSlop);
-    tweet.element.closest('article')?.setAttribute('data-slop-processed', 'true');
-
+    
+    const flaggedIds = new Set<string>();
+    results.forEach((result, index) => {
+      console.log('[Batch] Processing result', index, ':', result);
+      if (result.isSlop && index < batch.length) {
+        const tweetId = batch[index].id;
+        flaggedIds.add(tweetId);
+        console.log('[Flagged]', tweetId, 'confidence:', result.confidence, 'text:', batch[index].text.substring(0, 100));
+      } else {
+        console.log('[Clean]', batch[index]?.id, 'text:', batch[index]?.text.substring(0, 100));
+      }
+    });
+    
+    console.log('[Batch] Final result: Flagged', flaggedIds.size, 'out of', batch.length, 'tweets');
+    console.log('[Batch] Flagged IDs:', Array.from(flaggedIds));
+    return flaggedIds;
+    
   } catch (error) {
-    console.error('❌ Error processing tweet:', error, element);
+    console.error('[Batch] Analysis error:', error);
+    return new Set<string>();
   }
 }
 
-function startObserver(): void {
-  if (observer) {
-    observer.disconnect();
-  }
+function handleFlags(flags: Set<string>) {
+  flags.forEach(id => {
+    const el = elementMap.get(id);
+    if (el) {
+      collapseAITweet(el);
+      console.log('[Collapsed AI Tweet]', id);
+    }
+  });
+}
 
-  observer = new MutationObserver((mutations) => {
+async function flushQueue() {
+  if (queue.length < BATCH_SIZE) return;
+  const batch = queue.splice(0, BATCH_SIZE);
+  const flagged = await analyseBatch(batch);
+  handleFlags(flagged);
+}
+
+function processTweet(el: HTMLElement) {
+  if (!isEnabled) return;
+  
+  const data = extractTweetData(el);
+  if (!data) return;
+  const { id, text } = data;
+  if (!id || processed.includes(id)) return;
+
+  console.log('[Tweet]', id, text.substring(0, 120));
+
+  addProcessed(id);
+  queue.push({ id, text, element: el });
+  elementMap.set(id, el);
+  flushQueue();
+}
+
+function initialScan() {
+  if (!isEnabled) return;
+  getTweetElements().forEach(el => processTweet(el as HTMLElement));
+}
+
+function startObserver() {
+  if (observer) return;
+  
+  observer = new MutationObserver(muts => {
     if (!isEnabled) return;
-
-    const addedNodes: Element[] = [];
     
-    mutations.forEach(mutation => {
-      mutation.addedNodes.forEach(node => {
+    muts.forEach(m => {
+      m.addedNodes.forEach(node => {
         if (node.nodeType === Node.ELEMENT_NODE) {
-          const element = node as Element;
-          
-          const tweets = element.querySelectorAll ? 
-            Array.from(element.querySelectorAll('[data-testid="tweet"]')) : [];
-          
-          if (element.matches && element.matches('[data-testid="tweet"]')) {
-            tweets.push(element);
+          const el = node as HTMLElement;
+          if (el.matches('[data-testid="tweet"]')) {
+            processTweet(el);
+          } else {
+            el.querySelectorAll?.('[data-testid="tweet"]').forEach(t => processTweet(t as HTMLElement));
           }
-          
-          addedNodes.push(...tweets);
         }
       });
     });
-
-    if (addedNodes.length > 0) {
-      debugLog(`👀 Observer detected ${addedNodes.length} new tweet(s)`);
-      addedNodes.forEach(element => {
-        addToProcessingQueue(element);
-      });
-    }
   });
-
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    attributes: false
-  });
-
-  log('👁️ MutationObserver started for dynamic content detection');
+  
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
-function stopObserver(): void {
+function stopObserver() {
   if (observer) {
     observer.disconnect();
     observer = null;
-    log('🛑 MutationObserver stopped');
   }
 }
 
-function cleanupSlop(): void {
-  log('🧹 Cleaning up slop effects...');
+async function updateExtensionState() {
+  const enabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, false);
+  console.log('[Extension] State changed to:', enabled ? 'ENABLED' : 'DISABLED');
   
-  const processedTweets = document.querySelectorAll('[data-slop-processed="true"]');
-  processedTweets.forEach(tweet => {
-    const tweetElement = tweet as HTMLElement;
-    removeTweetEffect(tweetElement);
-    tweetElement.removeAttribute('data-slop-processed');
-  });
-  
-  log(`✅ Cleaned up ${processedTweets.length} processed tweets`);
-}
-
-async function updateState(enabled: boolean): Promise<void> {
-  const wasEnabled = isEnabled;
-  isEnabled = enabled;
-  
-  log(`🔄 State changed: ${wasEnabled} → ${enabled}`);
-  
-  if (enabled && !wasEnabled) {
-    if (isTwitterLoaded()) {
-      initializeSlop();
-    } else {
-      startLoadCheck();
-    }
-  } else if (!enabled && wasEnabled) {
+  if (enabled && !isEnabled) {
+    isEnabled = true;
+    startObserver();
+    initialScan();
+  } else if (!enabled && isEnabled) {
+    isEnabled = false;
     stopObserver();
-    cleanupSlop();
-    if (loadCheckInterval) {
-      clearInterval(loadCheckInterval);
-      loadCheckInterval = null;
-    }
+    queue.length = 0;
   }
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  try {
-    if (message.action === 'stateChanged') {
-      updateState(message.enabled);
-      sendResponse({ success: true });
-    }
-  } catch (error) {
-    console.error('Error in message listener:', error);
-    sendResponse({ success: false, error: String(error) });
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.action === 'stateChanged') {
+    updateExtensionState();
   }
-  
-  return true;
 });
 
-function handleNavigation(): void {
-  log('🧭 Navigation detected, reinitializing...');
-  
-  if (navigationTimeout) {
-    clearTimeout(navigationTimeout);
-  }
-  
-  navigationTimeout = window.setTimeout(() => {
-    if (isEnabled) {
-      processTweets();
-    }
-  }, 1000);
-}
-
-let lastUrl = location.href;
-new MutationObserver(() => {
-  const url = location.href;
-  if (url !== lastUrl) {
-    lastUrl = url;
-    handleNavigation();
-  }
-}).observe(document, { subtree: true, childList: true });
-
-async function initialize(): Promise<void> {
-  try {
-    log('🔧 Initializing content script...');
-    
-    const enabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);
-    log(`📊 Initial state from storage: ${enabled}`);
-    
-    await updateState(enabled);
-    
-    if (!isTwitterLoaded()) {
-      log('⏳ Twitter not loaded yet, starting load check...');
-      startLoadCheck();
-    }
-    
-    log('✅ Content script initialization complete');
-  } catch (error) {
-    console.error('❌ Content script initialization failed:', error);
-  }
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initialize);
-} else {
-  initialize();
-}
+(async () => {
+  await loadProcessed();
+  await updateExtensionState();
+})();
