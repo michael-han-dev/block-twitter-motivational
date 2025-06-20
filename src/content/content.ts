@@ -43,15 +43,15 @@ async function analyseBatch(batch: TweetInfo[]): Promise<Set<string>> {
   try {
     const useGroq = await getStorageValue(STORAGE_KEYS.USE_GROQ, true);
     console.log('[Batch] Using Groq:', useGroq);
-    
+
     const results = await analyzeTweetsWithLLM(texts, useGroq);
     console.log('[Batch] OpenRouter returned:', results);
     
     if (!results) {
       console.log('[Batch] No API key or analysis failed');
       return new Set<string>();
-    }
-    
+  }
+
     const flaggedIds = new Set<string>();
     results.forEach((result, index) => {
       console.log('[Batch] Processing result', index, ':', result);
@@ -61,7 +61,7 @@ async function analyseBatch(batch: TweetInfo[]): Promise<Set<string>> {
         console.log('[Flagged]', tweetId, 'confidence:', result.confidence, 'text:', batch[index].text.substring(0, 100));
       } else {
         console.log('[Clean]', batch[index]?.id, 'text:', batch[index]?.text.substring(0, 100));
-      }
+}
     });
     
     console.log('[Batch] Final result: Flagged', flaggedIds.size, 'out of', batch.length, 'tweets');
@@ -105,7 +105,7 @@ function processTweet(el: HTMLElement) {
   queue.push({ id, text, element: el });
   elementMap.set(id, el);
   flushQueue();
-}
+    }
 
 function initialScan() {
   if (!isEnabled) return;
@@ -114,7 +114,7 @@ function initialScan() {
 
 function startObserver() {
   if (observer) return;
-  
+
   observer = new MutationObserver(muts => {
     if (!isEnabled) return;
     
@@ -131,7 +131,7 @@ function startObserver() {
       });
     });
   });
-  
+
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
@@ -158,7 +158,7 @@ async function updateExtensionState() {
 }
 
 chrome.runtime.onMessage.addListener((message) => {
-  if (message.action === 'stateChanged') {
+    if (message.action === 'stateChanged') {
     updateExtensionState();
   }
 });
