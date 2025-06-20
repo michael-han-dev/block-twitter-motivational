@@ -14,20 +14,28 @@ export async function analyzeTweetsWithLLM(
 ): Promise<LLMAnalysisResult[] | null> {
   if (tweets.length === 0) return [];
   
-  const apiKey = await getStorageValue(
-    STORAGE_KEYS.OPENROUTER_API_KEY,
-    DEFAULT_VALUES[STORAGE_KEYS.OPENROUTER_API_KEY]
-  );
+  let apiKey: string;
+  let prompt: string;
   
-  if (!apiKey) {
-    console.warn('[OpenRouter] No API key set – skipping remote analysis');
+  try {
+    apiKey = await getStorageValue(
+      STORAGE_KEYS.OPENROUTER_API_KEY,
+      DEFAULT_VALUES[STORAGE_KEYS.OPENROUTER_API_KEY]
+    );
+    
+    if (!apiKey) {
+      console.warn('[OpenRouter] No API key set – skipping remote analysis');
+      return null;
+    }
+
+    prompt = await getStorageValue(
+      STORAGE_KEYS.SYSTEM_PROMPT,
+      DEFAULT_VALUES[STORAGE_KEYS.SYSTEM_PROMPT]
+    );
+  } catch (storageError) {
+    console.warn('[OpenRouter] Extension context invalidated, skipping analysis');
     return null;
   }
-
-  const prompt = await getStorageValue(
-    STORAGE_KEYS.SYSTEM_PROMPT,
-    DEFAULT_VALUES[STORAGE_KEYS.SYSTEM_PROMPT]
-  );
 
   const userContent = `Analyze these ${tweets.length} tweets and identify which are AI-generated motivational slop, engagement bait, or generic inspirational content. Return JSON with format: {"results": [{"id": 0, "isSlop": true/false, "confidence": 0.0-1.0}]}
 
