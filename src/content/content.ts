@@ -39,7 +39,6 @@ async function saveCollapsedTweets() {
 function addCollapsedTweet(id: string) {
   if (!collapsedTweetIds.includes(id)) {
     collapsedTweetIds.push(id);
-    // Keep only recent collapsed tweets to avoid memory issues
     if (collapsedTweetIds.length > MAX_TWEETS) {
       collapsedTweetIds.splice(0, DROP_COUNT);
     }
@@ -121,10 +120,8 @@ function processTweet(el: HTMLElement) {
   const { id, text } = data;
   if (!id) return;
   
-  // Always update the element map for tweet ID tracking
   elementMap.set(id, el);
   
-  // Check if this tweet was previously collapsed and re-collapse it
   if (collapsedTweetIds.includes(id)) {
     if (!el.hasAttribute('data-ai-collapsed')) {
       collapseAITweet(el);
@@ -133,7 +130,6 @@ function processTweet(el: HTMLElement) {
     return;
   }
   
-  // Skip if already processed for analysis
   if (processed.includes(id)) return;
 
   console.log('[Tweet]', id, text.substring(0, 120));
@@ -195,13 +191,11 @@ async function updateExtensionState() {
   
   if (enabled && !isEnabled) {
     isEnabled = true;
-    // Set up callback for manual tweet expansions
     window.slopBlockRemoveFromCollapsed = removeFromCollapsed;
     startObserver();
     initialScan();
   } else if (!enabled && isEnabled) {
     isEnabled = false;
-    // Remove callback
     window.slopBlockRemoveFromCollapsed = undefined;
     stopObserver();
     queue.length = 0;

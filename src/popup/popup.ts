@@ -45,7 +45,10 @@ async function updateToggleButton(enabled: boolean): Promise<void> {
   toggleInput.checked = enabled;
   elements.statusText.textContent = enabled ? 'Enabled' : 'Disabled';
   
-  if (!enabled) {
+  if (enabled) {
+    const count = await getStorageValue(STORAGE_KEYS.DETECTION_COUNT, DEFAULT_VALUES[STORAGE_KEYS.DETECTION_COUNT]);
+    updateBadge(count);
+  } else {
     elements.llmCountBadge.style.display = 'none';
   }
   
@@ -120,8 +123,12 @@ async function loadSettings(): Promise<void> {
 }
 
 function updateBadge(count: number): void {
+  const enabled = (elements.toggleButton as HTMLInputElement).checked;
   if (count > 0) {
     elements.llmCountBadge.textContent = String(count);
+    elements.llmCountBadge.style.display = 'inline-block';
+  } else if (enabled) {
+    elements.llmCountBadge.textContent = 'ON';
     elements.llmCountBadge.style.display = 'inline-block';
   } else {
     elements.llmCountBadge.style.display = 'none';
