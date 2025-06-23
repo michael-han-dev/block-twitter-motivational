@@ -53,16 +53,20 @@ ${tweets.map((tweet, i) => `${i}: ${tweet}`).join('\n\n')}`;
     }
   ];
 
-  const body: Record<string, unknown> = {
+  // Try with Groq provider first
+  const groqBody: Record<string, unknown> = {
     model: 'meta-llama/llama-4-maverick',
     temperature: 0.1,
     max_tokens: 1000,
     messages,
-    response_format: { type: 'json_object' }
+    response_format: { type: 'json_object' },
+    provider: 'groq'
   };
 
+  const startTime = performance.now();
+
   try {
-    console.log('[OpenRouter] Sending request with', tweets.length, 'tweets');
+    console.log('[OpenRouter] Sending request with', tweets.length, 'tweets via Groq provider');
     
     const res = await fetch(OPENROUTER_ENDPOINT, {
       method: 'POST',
@@ -72,20 +76,114 @@ ${tweets.map((tweet, i) => `${i}: ${tweet}`).join('\n\n')}`;
         'HTTP-Referer': window.location.origin,
         'X-Title': 'SlopBlock Extension'
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify(groqBody)
     });
+
+    const responseTime = Math.round(performance.now() - startTime);
 
     if (!res.ok) {
       const errorText = await res.text();
-      console.error('[OpenRouter] HTTP error', res.status, errorText);
+      console.warn('[OpenRouter] Groq provider failed (HTTP', res.status, '), attempting fallback:', errorText);
+      
+      // Fallback: Retry without provider constraint
+      return await analyzeTweetsWithFallback(tweets, messages, apiKey, responseTime);
+    }
+
+    const responseText = await res.text();
+    
+    // Log successful Groq routing with performance metrics
+    console.log(`[OpenRouter] ✅ Groq provider success (${responseTime}ms) - Response length:`, responseText.length);
+    
+    if (!responseText.trim()) {
+      console.error('[OpenRouter] Empty response from Groq provider');
+      return await analyzeTweetsWithFallback(tweets, messages, apiKey, responseTime);
+    }
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('[OpenRouter] Failed to parse Groq response JSON:', parseError);
+      return await analyzeTweetsWithFallback(tweets, messages, apiKey, responseTime);
+    }
+
+    // Log provider information from response headers
+    const provider = res.headers.get('x-or-provider') || 'unknown';
+    const model = res.headers.get('x-or-model') || 'unknown';
+    console.log(`[OpenRouter] Provider confirmed: ${provider}, Model: ${model}, Response time: ${responseTime}ms`);
+
+    const raw = data?.choices?.[0]?.message?.content;
+    if (!raw) {
+      console.error('[OpenRouter] No content in Groq response data:', data);
+      return await analyzeTweetsWithFallback(tweets, messages, apiKey, responseTime);
+    }
+
+    console.log('[OpenRouter] Groq AI response content:', raw);
+    
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (contentParseError) {
+      console.error('[OpenRouter] Failed to parse Groq AI response JSON:', contentParseError);
+      return await analyzeTweetsWithFallback(tweets, messages, apiKey, responseTime);
+    }
+    
+    console.log(`[OpenRouter] ✅ Groq analysis complete (${responseTime}ms):`, parsed);
+    return parsed.results || parsed;
+  } catch (err) {
+    const responseTime = Math.round(performance.now() - startTime);
+    console.warn('[OpenRouter] Groq provider network error, attempting fallback:', err);
+    return await analyzeTweetsWithFallback(tweets, messages, apiKey, responseTime);
+  }
+}
+
+// Fallback function for when Groq provider fails
+async function analyzeTweetsWithFallback(
+  tweets: string[],
+  messages: any[],
+  apiKey: string,
+  groqAttemptTime: number
+): Promise<LLMAnalysisResult[] | null> {
+  console.log('[OpenRouter] 🔄 Falling back to standard provider routing');
+  
+  const fallbackBody: Record<string, unknown> = {
+    model: 'meta-llama/llama-4-maverick',
+    temperature: 0.1,
+    max_tokens: 1000,
+    messages,
+    response_format: { type: 'json_object' }
+    // No provider specified - let OpenRouter choose
+  };
+
+  const fallbackStartTime = performance.now();
+
+  try {
+    const res = await fetch(OPENROUTER_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': window.location.origin,
+        'X-Title': 'SlopBlock Extension'
+      },
+      body: JSON.stringify(fallbackBody)
+    });
+
+    const fallbackResponseTime = Math.round(performance.now() - fallbackStartTime);
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('[OpenRouter] Fallback also failed (HTTP', res.status, '):', errorText);
       return null;
     }
 
     const responseText = await res.text();
-    console.log('[OpenRouter] Full response text:', responseText);
+    
+    // Log successful fallback with performance comparison
+    console.log(`[OpenRouter] ✅ Fallback provider success (${fallbackResponseTime}ms vs ${groqAttemptTime}ms Groq attempt)`);
     
     if (!responseText.trim()) {
-      console.error('[OpenRouter] Empty response from API');
+      console.error('[OpenRouter] Empty response from fallback provider');
       return null;
     }
 
@@ -93,32 +191,36 @@ ${tweets.map((tweet, i) => `${i}: ${tweet}`).join('\n\n')}`;
     try {
       data = JSON.parse(responseText);
     } catch (parseError) {
-      console.error('[OpenRouter] Failed to parse response JSON:', parseError);
-      console.error('[OpenRouter] Response was:', responseText);
+      console.error('[OpenRouter] Failed to parse fallback response JSON:', parseError);
       return null;
     }
+
+    // Log fallback provider information
+    const provider = res.headers.get('x-or-provider') || 'unknown';
+    const model = res.headers.get('x-or-model') || 'unknown';
+    console.log(`[OpenRouter] Fallback provider: ${provider}, Model: ${model}, Response time: ${fallbackResponseTime}ms`);
 
     const raw = data?.choices?.[0]?.message?.content;
     if (!raw) {
-      console.error('[OpenRouter] No content in response data:', data);
+      console.error('[OpenRouter] No content in fallback response data:', data);
       return null;
     }
 
-    console.log('[OpenRouter] AI response content:', raw);
+    console.log('[OpenRouter] Fallback AI response content:', raw);
     
     let parsed;
     try {
       parsed = JSON.parse(raw);
     } catch (contentParseError) {
-      console.error('[OpenRouter] Failed to parse AI response JSON:', contentParseError);
-      console.error('[OpenRouter] AI content was:', raw);
+      console.error('[OpenRouter] Failed to parse fallback AI response JSON:', contentParseError);
       return null;
     }
     
-    console.log('[OpenRouter] Parsed results:', parsed);
+    console.log(`[OpenRouter] ✅ Fallback analysis complete (${fallbackResponseTime}ms):`, parsed);
     return parsed.results || parsed;
   } catch (err) {
-    console.error('[OpenRouter] Network/parse error', err);
+    const fallbackResponseTime = Math.round(performance.now() - fallbackStartTime);
+    console.error(`[OpenRouter] Fallback network error after ${fallbackResponseTime}ms:`, err);
     return null;
   }
 } 
