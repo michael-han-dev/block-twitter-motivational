@@ -1,10 +1,8 @@
-console.log('🔍 SlopBlock: Script loaded at', new Date().toISOString());
-console.log('🔍 SlopBlock: URL:', window.location.href);
-console.log('🔍 SlopBlock: Document ready state:', document.readyState);
+console.log('SlopBlock: Content script loaded');
 
 import { getLocalStorageValue, setLocalStorageValue, getStorageValue, STORAGE_KEYS } from '../utils/storage';
 import { getTweetElements, extractTweetData, collapseAITweet } from '../utils/dom';
-import { analyzeTweetsWithLLM } from '../utils/openrouter';
+import { analyzeTweetsWithLLM } from '../utils/groq';
 
 type TweetInfo = { id: string; text: string; element: HTMLElement };
 
@@ -29,7 +27,7 @@ async function saveProcessed() {
 
 async function loadCollapsedTweets() {
   collapsedTweetIds = await getLocalStorageValue<string[]>(STORAGE_KEYS.COLLAPSED_TWEET_IDS, []);
-  console.log('[Collapsed] Loaded', collapsedTweetIds.length, 'previously collapsed tweet IDs');
+  console.log('SlopBlock: Loaded', collapsedTweetIds.length, 'collapsed tweets');
 }
 
 async function saveCollapsedTweets() {
@@ -58,38 +56,34 @@ function addProcessed(id: string) {
   }
 }
 
-async function analyseBatch(batch: TweetInfo[]): Promise<Set<string>> {
-  const texts = batch.map(t => t.text);
-  console.log('[Batch] Analyzing', batch.length, 'tweets with OpenRouter...');
-  console.log('[Batch] Tweet texts being sent:', texts);
+async function analyzeBatch(batch: TweetInfo[]): Promise<Set<string>> {
+  if (batch.length === 0) return new Set();
+  
+  const texts = batch.map(tweet => tweet.text);
+  console.log('SlopBlock: Analyzing', batch.length, 'tweets');
   
   try {
     const results = await analyzeTweetsWithLLM(texts);
-    console.log('[Batch] OpenRouter returned:', results);
+    console.log('SlopBlock: Analysis results:', results);
     
     if (!results) {
-      console.log('[Batch] No API key or analysis failed');
+      console.log('SlopBlock: No API results');
       return new Set<string>();
-  }
+    }
 
     const flaggedIds = new Set<string>();
     results.forEach((result, index) => {
-      console.log('[Batch] Processing result', index, ':', result);
       if (result.isSlop && index < batch.length) {
         const tweetId = batch[index].id;
         flaggedIds.add(tweetId);
-        console.log('[Flagged]', tweetId, 'confidence:', result.confidence, 'text:', batch[index].text.substring(0, 100));
-      } else {
-        console.log('[Clean]', batch[index]?.id, 'text:', batch[index]?.text.substring(0, 100));
-}
+        console.log('SlopBlock: Flagged tweet', tweetId);
+      }
     });
     
-    console.log('[Batch] Final result: Flagged', flaggedIds.size, 'out of', batch.length, 'tweets');
-    console.log('[Batch] Flagged IDs:', Array.from(flaggedIds));
     return flaggedIds;
     
   } catch (error) {
-    console.error('[Batch] Analysis error:', error);
+    console.error('SlopBlock: Analysis error:', error);
     return new Set<string>();
   }
 }
@@ -100,7 +94,7 @@ function handleFlags(flags: Set<string>) {
     if (el) {
       collapseAITweet(el);
       addCollapsedTweet(id);
-      console.log('[Collapsed AI Tweet]', id);
+      console.log('SlopBlock: Collapsed tweet', id);
     }
   });
 }
@@ -108,7 +102,7 @@ function handleFlags(flags: Set<string>) {
 async function flushQueue() {
   if (queue.length < BATCH_SIZE) return;
   const batch = queue.splice(0, BATCH_SIZE);
-  const flagged = await analyseBatch(batch);
+  const flagged = await analyzeBatch(batch);
   handleFlags(flagged);
 }
 
@@ -125,15 +119,14 @@ function processTweet(el: HTMLElement) {
   if (collapsedTweetIds.includes(id)) {
     if (!el.hasAttribute('data-ai-collapsed')) {
       collapseAITweet(el);
-      console.log('[Re-collapsed Previously Flagged Tweet]', id);
+      console.log('SlopBlock: Re-collapsed tweet', id);
     }
     return;
   }
   
   if (processed.includes(id)) return;
 
-  console.log('[Tweet]', id, text.substring(0, 120));
-
+  console.log('SlopBlock: Processing tweet', id, text.substring(0, 50) + '...');
   addProcessed(id);
   queue.push({ id, text, element: el });
   flushQueue();
@@ -141,11 +134,14 @@ function processTweet(el: HTMLElement) {
 
 function initialScan() {
   if (!isEnabled) return;
-  getTweetElements().forEach(el => processTweet(el as HTMLElement));
+  const tweets = getTweetElements();
+  console.log('SlopBlock: Initial scan found', tweets.length, 'tweets');
+  tweets.forEach(el => processTweet(el as HTMLElement));
 }
 
 function startObserver() {
   if (observer) return;
+  console.log('SlopBlock: Starting mutation observer');
 
   observer = new MutationObserver(muts => {
     if (!isEnabled) return;
@@ -169,6 +165,7 @@ function startObserver() {
 
 function stopObserver() {
   if (observer) {
+    console.log('SlopBlock: Stopping mutation observer');
     observer.disconnect();
     observer = null;
   }
@@ -178,7 +175,6 @@ function removeFromCollapsed(tweetId: string) {
   const index = collapsedTweetIds.indexOf(tweetId);
   if (index !== -1) {
     collapsedTweetIds.splice(index, 1);
-    console.log('[Manual Expansion] Removed tweet from collapsed list:', tweetId);
     if (chrome?.runtime?.id) {
       saveCollapsedTweets();
     }
@@ -187,7 +183,7 @@ function removeFromCollapsed(tweetId: string) {
 
 async function updateExtensionState() {
   const enabled = await getStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, false);
-  console.log('[Extension] State changed to:', enabled ? 'ENABLED' : 'DISABLED');
+  console.log('SlopBlock: Extension state changed to:', enabled ? 'ENABLED' : 'DISABLED');
   
   if (enabled && !isEnabled) {
     isEnabled = true;
@@ -204,12 +200,15 @@ async function updateExtensionState() {
 
 chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'stateChanged') {
+    console.log('SlopBlock: Received state change message');
     updateExtensionState();
   }
 });
 
 (async () => {
+  console.log('SlopBlock: Initializing extension');
   await loadProcessed();
   await loadCollapsedTweets();
   await updateExtensionState();
+  console.log('SlopBlock: Initialization complete');
 })();

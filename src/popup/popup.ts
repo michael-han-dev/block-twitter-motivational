@@ -54,6 +54,11 @@ async function updateToggleButton(enabled: boolean): Promise<void> {
   
   try {
     await setStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, enabled);
+
+    chrome.runtime.sendMessage({
+      action: 'stateChanged',
+      enabled: enabled
+    }).catch(() => {});
     
     chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
       if (tabs[0]?.id) {
@@ -83,14 +88,14 @@ function showSettingsView(): void {
 async function saveApiKey(): Promise<void> {
   const apiKey = elements.apiKeyInput.value.trim();
   if (apiKey) {
-    await setStorageValue(STORAGE_KEYS.OPENROUTER_API_KEY, apiKey);
+    await setStorageValue(STORAGE_KEYS.GROQ_API_KEY, apiKey);
     savedApiKey = apiKey;
     elements.apiKeyInput.value = maskKey(apiKey);
     elements.saveApiKeyButton.textContent = 'Saved!';
     setTimeout(() => {
       elements.saveApiKeyButton.textContent = 'Submit API Key';
     }, 2000);
-    updateApiKeyButtonState();
+    updateToggleButton(true);
   }
 }
 
@@ -106,20 +111,18 @@ async function saveCustomPrompt(): Promise<void> {
 }
 
 async function loadSettings(): Promise<void> {
-  const apiKey = await getStorageValue(STORAGE_KEYS.OPENROUTER_API_KEY, '');
+  const apiKey = await getStorageValue(STORAGE_KEYS.GROQ_API_KEY, '');
   savedApiKey = apiKey;
   
   elements.apiKeyInput.value = maskKey(apiKey);
   elements.customPromptInput.value = await getStorageValue(STORAGE_KEYS.SYSTEM_PROMPT, '');
-
-
 
   const count = await getStorageValue(
     STORAGE_KEYS.DETECTION_COUNT,
     DEFAULT_VALUES[STORAGE_KEYS.DETECTION_COUNT]
   );
   updateBadge(count);
-  updateApiKeyButtonState();
+  updateToggleButton(true);
 }
 
 function updateBadge(count: number): void {
@@ -135,7 +138,7 @@ function updateBadge(count: number): void {
   }
 }
 
-function updateApiKeyButtonState(): void {
+function updateToggleButtonState(): void {
   const current = elements.apiKeyInput.value.trim();
   const isUnchanged = current === maskKey(savedApiKey) || current === savedApiKey;
   elements.saveApiKeyButton.toggleAttribute('disabled', isUnchanged);
@@ -169,10 +172,7 @@ async function initializePopup(): Promise<void> {
   elements.saveApiKeyButton.addEventListener('click', saveApiKey);
   elements.savePromptButton.addEventListener('click', saveCustomPrompt);
 
-  elements.apiKeyInput.addEventListener('input', updateApiKeyButtonState);
-
-
-
+  elements.apiKeyInput.addEventListener('input', updateToggleButtonState);
 
   chrome.storage.onChanged.addListener((changes) => {
     if (changes[STORAGE_KEYS.DETECTION_COUNT]) {

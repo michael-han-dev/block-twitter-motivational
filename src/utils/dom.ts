@@ -2,21 +2,12 @@ import { TweetMetadata } from './storage';
 
 declare global {
   interface Window {
-    DEBUG_SLOP_DETECTION?: boolean;
     slopBlockRemoveFromCollapsed?: (tweetId: string) => void;
   }
 }
 
 let processingQueue: Element[] = [];
 let isProcessing = false;
-
-const DEBUG = window.DEBUG_SLOP_DETECTION || false;
-
-function debugLog(...args: any[]): void {
-  if (DEBUG) {
-    console.log('[SlopBlock DOM]', ...args);
-  }
-}
 
 interface ProcessingStats {
   totalTweets: number;
@@ -62,7 +53,6 @@ function extractTweetData(element: Element): TweetMetadata | null {
 
     const tweetText = extractTweetTextRobust(element);
     if (!tweetText) {
-      debugLog('No text extracted for tweet:', element);
       return null;
     }
 
@@ -92,13 +82,6 @@ function extractTweetData(element: Element): TweetMetadata | null {
       timestamp: Date.now()
     };
 
-    debugLog('Extracted tweet data:', {
-      username,
-      textLength: tweetText.length,
-      engagement,
-      textPreview: tweetText.substring(0, 100) + '...'
-    });
-
     return metadata;
   } catch (error) {
     console.error('Error extracting tweet data:', error);
@@ -114,7 +97,6 @@ function extractTweetTextRobust(element: Element): string {
   
   if (primaryElement?.textContent?.trim()) {
     extractedText = primaryElement.textContent.trim();
-    debugLog('Strategy 1 success:', extractedText.substring(0, 50));
     return extractedText;
   }
 
@@ -133,7 +115,6 @@ function extractTweetTextRobust(element: Element): string {
     if (texts.length > 0) {
       extractedText = texts.join(' ').trim();
       if (extractedText.length > 10) {
-        debugLog('Strategy 2 success:', extractedText.substring(0, 50));
         return extractedText;
       }
     }
@@ -148,7 +129,6 @@ function extractTweetTextRobust(element: Element): string {
   }
   
   if (extractedText.trim().length > 10) {
-    debugLog('Strategy 3 success:', extractedText.substring(0, 50));
     return extractedText.trim();
   }
 
@@ -161,11 +141,9 @@ function extractTweetTextRobust(element: Element): string {
 
   if (meaningfulTexts.length > 0) {
     extractedText = meaningfulTexts.join(' ').trim();
-    debugLog('Strategy 4 success:', extractedText.substring(0, 50));
     return extractedText;
   }
 
-  debugLog('All strategies failed for element:', element);
   return '';
 }
 
@@ -462,24 +440,14 @@ function removeTweetEffect(element: HTMLElement): void {
 }
 
 function addDebugHighlight(element: HTMLElement, detected: boolean): void {
-  if (!DEBUG) return;
-  
   if (element.hasAttribute('data-slop-processed')) {
     return;
   }
 
   if (detected) {
     element.classList.add('slop-debug-detected');
-    debugLog('🔴 SLOP DETECTED:', {
-      element,
-      text: element.textContent?.substring(0, 100)
-    });
   } else {
     element.classList.add('slop-debug-processed');
-    debugLog('🟢 Clean tweet processed:', {
-      element,
-      text: element.textContent?.substring(0, 50)
-    });
   }
 
   element.setAttribute('data-slop-processed', 'true');
@@ -492,7 +460,6 @@ function hideAllExceptUsername(element: HTMLElement): void {
 
   const usernameInfo = extractUsernameInfo(element);
   if (!usernameInfo.displayName && !usernameInfo.handle) {
-    debugLog('Could not extract username, falling back to collapse');
     collapseToStub(element);
     return;
   }
