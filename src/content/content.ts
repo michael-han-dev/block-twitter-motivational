@@ -12,7 +12,7 @@ const BATCH_SIZE = 10;
 
 let processed: string[] = [];
 let collapsedTweetIds: string[] = [];
-let queue: TweetInfo[] = [];
+  let queue: TweetInfo[] = [];
 const elementMap = new Map<string, HTMLElement>();
 let isEnabled = false;
 let observer: MutationObserver | null = null;

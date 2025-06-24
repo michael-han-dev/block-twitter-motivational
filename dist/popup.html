@@ -232,27 +232,6 @@
       box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
     }
 
-    .textarea-field {
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid #e4e4e7;
-      border-radius: 6px;
-      font-size: 14px;
-      font-family: inherit;
-      background: #fff;
-      color: #09090b;
-      margin-bottom: 12px;
-      box-sizing: border-box;
-      min-height: 80px;
-      resize: vertical;
-    }
-
-    .textarea-field:focus {
-      outline: none;
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-    }
-
     .submit-button {
       width: 100%;
       padding: 8px 12px;
@@ -326,20 +305,8 @@
           </svg>
           <h2 class="section-title">Groq API Key</h2>
         </div>
-        <input type="text" class="input-field" id="apiKeyInput" placeholder="sk-or-v1 ----"/>
+        <input type="text" class="input-field" id="apiKeyInput" placeholder="gsk_..."/>
         <button class="submit-button" id="submitApiKey">Submit API Key</button>
-      </div>
-      
-
-      <div class="settings-section">
-        <div class="section-header">
-          <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-          <h2 class="section-title">Custom Prompt</h2>
-        </div>
-        <textarea class="textarea-field" id="customPromptInput" placeholder="Write your custom prompt here..."></textarea>
-        <button class="submit-button" id="savePrompt">Save Prompt</button>
       </div>
     </div>
   </div>

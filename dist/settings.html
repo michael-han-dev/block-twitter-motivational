@@ -175,37 +175,25 @@
           <path d="M21 2l-9 9"/>
           <path d="M21 2l-4 16-4-7-7-4z"/>
         </svg>
-        <h2 class="section-title">OpenRouter API Key</h2>
+        <h2 class="section-title">Groq API Key</h2>
       </div>
       <input 
         type="text" 
         class="input-field" 
         id="apiKeyInput"
-        placeholder="gsk_1 -----"
+        placeholder="gsk_1..."
       />
       <button class="submit-button" id="submitApiKey">
         Submit API Key
       </button>
     </div>
-    
-    <div class="section">
-      <div class="section-header">
-        <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        </svg>
-        <h2 class="section-title">Custom Prompt</h2>
-      </div>
-      <textarea 
-        class="textarea-field" 
-        id="customPromptInput"
-        placeholder="Write your custom prompt here..."
-      ></textarea>
-      <button class="submit-button" id="savePrompt">
-        Save Prompt
-      </button>
-    </div>
   </div>
   
-  <script src="settings.js"></script>
+  <script>
+    document.getElementById('backButton').addEventListener('click', () => {
+      window.close();
+    });
+    
+  </script>
 </body>
 </html> 

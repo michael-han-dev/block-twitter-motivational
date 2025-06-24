@@ -51,7 +51,7 @@ ${tweets.map((tweet, i) => `${i}: ${tweet}`).join('\n\n')}`;
   const messages = [
     {
       role: 'system',
-      content: prompt + '\n\nIMPORTANT: You must respond with ONLY valid JSON in the exact format specified. No additional text, explanations, or formatting.'
+      content: prompt + '\n important: You must respond with only valid json in the exact format specified. No additional text, explanations, or formatting.'
     },
     {
       role: 'user',

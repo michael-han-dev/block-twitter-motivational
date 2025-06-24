@@ -9,8 +9,6 @@ interface UIElements {
   backButton: HTMLElement;
   apiKeyInput: HTMLInputElement;
   saveApiKeyButton: HTMLElement;
-  customPromptInput: HTMLTextAreaElement;
-  savePromptButton: HTMLElement;
   llmCountBadge: HTMLElement;
 }
 
@@ -27,8 +25,6 @@ function getUIElements(): UIElements {
     backButton: document.getElementById('backButton')!,
     apiKeyInput: document.getElementById('apiKeyInput') as HTMLInputElement,
     saveApiKeyButton: document.getElementById('submitApiKey')!,
-    customPromptInput: document.getElementById('customPromptInput') as HTMLTextAreaElement,
-    savePromptButton: document.getElementById('savePrompt')!,
     llmCountBadge: document.getElementById('llmCountBadge')!
   };
 }
@@ -95,18 +91,6 @@ async function saveApiKey(): Promise<void> {
     setTimeout(() => {
       elements.saveApiKeyButton.textContent = 'Submit API Key';
     }, 2000);
-    updateToggleButton(true);
-  }
-}
-
-async function saveCustomPrompt(): Promise<void> {
-  const customPrompt = elements.customPromptInput.value.trim();
-  if (customPrompt) {
-    await setStorageValue(STORAGE_KEYS.SYSTEM_PROMPT, customPrompt);
-    elements.savePromptButton.textContent = 'Saved!';
-    setTimeout(() => {
-      elements.savePromptButton.textContent = 'Save Prompt';
-    }, 2000);
   }
 }
 
@@ -115,14 +99,12 @@ async function loadSettings(): Promise<void> {
   savedApiKey = apiKey;
   
   elements.apiKeyInput.value = maskKey(apiKey);
-  elements.customPromptInput.value = await getStorageValue(STORAGE_KEYS.SYSTEM_PROMPT, '');
 
   const count = await getStorageValue(
     STORAGE_KEYS.DETECTION_COUNT,
     DEFAULT_VALUES[STORAGE_KEYS.DETECTION_COUNT]
   );
   updateBadge(count);
-  updateToggleButton(true);
 }
 
 function updateBadge(count: number): void {
@@ -170,7 +152,6 @@ async function initializePopup(): Promise<void> {
   });
 
   elements.saveApiKeyButton.addEventListener('click', saveApiKey);
-  elements.savePromptButton.addEventListener('click', saveCustomPrompt);
 
   elements.apiKeyInput.addEventListener('input', updateToggleButtonState);
 
