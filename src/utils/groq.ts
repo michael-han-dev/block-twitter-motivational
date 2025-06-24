@@ -51,7 +51,7 @@ ${tweets.map((tweet, i) => `${i}: ${tweet}`).join('\n\n')}`;
   const messages = [
     {
       role: 'system',
-      content: prompt + '\n important: You must respond with only valid json in the exact format specified. No additional text, explanations, or formatting.'
+      content: prompt
     },
     {
       role: 'user',
@@ -68,7 +68,6 @@ ${tweets.map((tweet, i) => `${i}: ${tweet}`).join('\n\n')}`;
   };
 
   try {
-    console.log('SlopBlock: Making Groq API request...');
     const res = await fetch(GROQ_ENDPOINT, {
       method: 'POST',
       headers: {
