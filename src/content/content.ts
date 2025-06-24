@@ -8,7 +8,7 @@ type TweetInfo = { id: string; text: string; element: HTMLElement };
 
 const MAX_TWEETS = 200;
 const DROP_COUNT = 10;
-const BATCH_SIZE = 15;
+const BATCH_SIZE = 10;
 
 let processed: string[] = [];
 let collapsedTweetIds: string[] = [];

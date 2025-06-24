@@ -81,11 +81,6 @@ export interface TweetMetadata {
   id: string;
   text: string;
   username: string;
-  engagement: {
-    likes: number;
-    retweets: number;
-    replies: number;
-  };
   element: HTMLElement;
   timestamp: number;
 } 

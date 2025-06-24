@@ -28,6 +28,31 @@ function getTweetElements(): Element[] {
   });
 }
 
+function hasAttachment(element: Element): boolean {
+  const attachmentSelectors = [
+    '[data-testid="tweetPhoto"]',
+    '[data-testid="videoPlayer"]',
+    '[data-testid="tweetVideo"]', 
+    '[data-testid="videoComponent"]',
+    '[data-testid="card.wrapper"]',
+    '[data-testid="tweetGif"]',
+    '[data-testid="gif"]',
+    '[data-testid="poll"]',
+    '[data-testid="quoteTweet"]',
+    'img[src*="pbs.twimg.com"]',
+    'img[src*="media"]',
+    '[data-testid="attachments"]'
+  ];
+  
+  for (const selector of attachmentSelectors) {
+    if (element.querySelector(selector)) {
+      const tweetText = extractTweetTextRobust(element);
+      return true;
+    }
+  }
+  return false;
+}
+
 function extractTweetId(element: HTMLElement): string | null {
   const links = element.querySelectorAll('a[href*="/status/"]');
   for (const link of Array.from(links)) {
@@ -49,6 +74,10 @@ function fallbackHash(content: string): string {
 
 function extractTweetData(element: Element): TweetMetadata | null {
   try {
+    if (hasAttachment(element)) {
+      return null;
+    }
+
     const id = extractTweetId(element as HTMLElement);
 
     const tweetText = extractTweetTextRobust(element);
@@ -61,23 +90,11 @@ function extractTweetData(element: Element): TweetMetadata | null {
     const userElement = element.querySelector('[data-testid="User-Name"]');
     const username = userElement?.textContent?.trim() || 'unknown';
 
-    const engagementElements = {
-      replies: element.querySelector('[data-testid="reply"]'),
-      retweets: element.querySelector('[data-testid="retweet"]'),
-      likes: element.querySelector('[data-testid="like"]')
-    };
-
-    const engagement = {
-      replies: parseEngagementCount(engagementElements.replies?.textContent || '0'),
-      retweets: parseEngagementCount(engagementElements.retweets?.textContent || '0'),
-      likes: parseEngagementCount(engagementElements.likes?.textContent || '0')
-    };
 
     const metadata: TweetMetadata = {
       id: id || fallbackHash(tweetText),
       text: tweetText,
       username,
-      engagement,
       element: element as HTMLElement,
       timestamp: Date.now()
     };
@@ -609,5 +626,6 @@ export {
   restoreFromUsernameOnly,
   collapseAITweet,
   expandAITweet,
+  hasAttachment,
   type TweetMetadata 
 }; 
