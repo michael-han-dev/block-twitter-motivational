@@ -10,6 +10,9 @@ interface UIElements {
   apiKeyInput: HTMLInputElement;
   saveApiKeyButton: HTMLElement;
   llmCountBadge: HTMLElement;
+  keywordsList: HTMLElement;
+  addKeywordButton: HTMLElement;
+  saveKeywordsButton: HTMLElement;
 }
 
 let elements: UIElements;
@@ -25,7 +28,10 @@ function getUIElements(): UIElements {
     backButton: document.getElementById('backButton')!,
     apiKeyInput: document.getElementById('apiKeyInput') as HTMLInputElement,
     saveApiKeyButton: document.getElementById('submitApiKey')!,
-    llmCountBadge: document.getElementById('llmCountBadge')!
+    llmCountBadge: document.getElementById('llmCountBadge')!,
+    keywordsList: document.getElementById('keywordsList')!,
+    addKeywordButton: document.getElementById('addKeyword')!,
+    saveKeywordsButton: document.getElementById('saveKeywords')!
   };
 }
 
@@ -155,10 +161,75 @@ async function initializePopup(): Promise<void> {
 
   elements.apiKeyInput.addEventListener('input', updateToggleButtonState);
 
+  elements.addKeywordButton.addEventListener('click', () => addKeywordField());
+  elements.saveKeywordsButton.addEventListener('click', saveKeywords);
+
+  loadKeywords();
+
   chrome.storage.onChanged.addListener((changes) => {
     if (changes[STORAGE_KEYS.DETECTION_COUNT]) {
       updateBadge(changes[STORAGE_KEYS.DETECTION_COUNT].newValue);
     }
+  });
+}
+
+function addKeywordField(value: string = ''): void {
+  const keywordItem = document.createElement('div');
+  keywordItem.className = 'keyword-item';
+  
+  keywordItem.innerHTML = `
+    <input type="text" class="keyword-input" placeholder="Enter keyword to block" value="${value}" />
+    <span class="remove-keyword">−</span>
+  `;
+  
+  const removeButton = keywordItem.querySelector('.remove-keyword') as HTMLElement;
+  removeButton.addEventListener('click', () => {
+    keywordItem.remove();
+  });
+  
+  elements.keywordsList.appendChild(keywordItem);
+}
+
+function getKeywordValues(): string[] {
+  const inputs = elements.keywordsList.querySelectorAll('.keyword-input') as NodeListOf<HTMLInputElement>;
+  return Array.from(inputs)
+    .map(input => input.value.trim())
+    .filter(value => value.length > 0);
+}
+
+async function saveKeywords(): Promise<void> {
+  const keywords = getKeywordValues();
+  await setStorageValue(STORAGE_KEYS.BLOCKED_KEYWORDS, keywords);
+  
+  elements.saveKeywordsButton.textContent = 'Saved!';
+  setTimeout(() => {
+    elements.saveKeywordsButton.textContent = 'Save Keywords';
+  }, 2000);
+}
+
+async function loadKeywords(): Promise<void> {
+  const keywords = await getStorageValue(STORAGE_KEYS.BLOCKED_KEYWORDS, DEFAULT_VALUES[STORAGE_KEYS.BLOCKED_KEYWORDS]);
+  
+  elements.keywordsList.innerHTML = '';
+  
+  if (keywords.length === 0) {
+    addKeywordField();
+  } else {
+    keywords.forEach(keyword => addKeywordField(keyword));
+  }
+  
+  setupRemoveButtons();
+}
+
+function setupRemoveButtons(): void {
+  const removeButtons = elements.keywordsList.querySelectorAll('.remove-keyword');
+  removeButtons.forEach(button => {
+    button.addEventListener('click', (e) => {
+      const keywordItem = (e.target as HTMLElement).closest('.keyword-item');
+      if (keywordItem && elements.keywordsList.children.length > 1) {
+        keywordItem.remove();
+      }
+    });
   });
 }
 
