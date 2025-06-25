@@ -6,21 +6,6 @@ declare global {
   }
 }
 
-let processingQueue: Element[] = [];
-let isProcessing = false;
-
-interface ProcessingStats {
-  totalTweets: number;
-  textExtracted: number;
-  slopDetected: number;
-}
-
-const stats: ProcessingStats = {
-  totalTweets: 0,
-  textExtracted: 0,
-  slopDetected: 0
-};
-
 function getTweetElements(): Element[] {
   return Array.from(document.querySelectorAll('[data-testid="tweet"]')).filter(tweet => {
     const parent = tweet.closest('article');
@@ -46,7 +31,6 @@ function hasAttachment(element: Element): boolean {
   
   for (const selector of attachmentSelectors) {
     if (element.querySelector(selector)) {
-      const tweetText = extractTweetTextRobust(element);
       return true;
     }
   }
@@ -84,8 +68,6 @@ function extractTweetData(element: Element): TweetMetadata | null {
     if (!tweetText) {
       return null;
     }
-
-    stats.textExtracted++;
 
     const userElement = element.querySelector('[data-testid="User-Name"]');
     const username = userElement?.textContent?.trim() || 'unknown';
@@ -205,23 +187,6 @@ function isNavigationText(text: string): boolean {
   ];
   
   return navPatterns.some(pattern => pattern.test(text.trim()));
-}
-
-function parseEngagementCount(text: string): number {
-  if (!text) return 0;
-  
-  const cleanText = text.replace(/[^\d.KMkm]/g, '');
-  const number = parseFloat(cleanText);
-  
-  if (isNaN(number)) return 0;
-  
-  if (cleanText.toLowerCase().includes('k')) {
-    return Math.round(number * 1000);
-  } else if (cleanText.toLowerCase().includes('m')) {
-    return Math.round(number * 1000000);
-  }
-  
-  return Math.round(number);
 }
 
 function collapseToStub(element: HTMLElement): void {

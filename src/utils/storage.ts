@@ -16,14 +16,6 @@ export async function setStorageValue<T>(key: string, value: T): Promise<void> {
   }
 }
 
-export async function removeStorageValue(key: string): Promise<void> {
-  try {
-    await chrome.storage.sync.remove(key);
-  } catch (error) {
-    console.error(`Failed to remove storage value for key ${key}:`, error);
-  }
-}
-
 export async function getLocalStorageValue<T>(key: string, defaultValue: T): Promise<T> {
   try {
     const result = await chrome.storage.local.get({ [key]: defaultValue });
@@ -49,7 +41,6 @@ export async function setLocalStorageValue<T>(key: string, value: T): Promise<vo
 export const STORAGE_KEYS = {
   SLOP_BLOCK_ENABLED: 'slopBlockEnabled',
   DETECTION_COUNT: 'detectionCount',
-  USER_WHITELIST: 'userWhitelist',
   BLUR_MODE: 'blurMode',
   GROQ_API_KEY: 'groqApiKey',
   AI_DETECTION_ENABLED: 'aiDetectionEnabled',
@@ -63,7 +54,6 @@ export const STORAGE_KEYS = {
 export const DEFAULT_VALUES = {
   [STORAGE_KEYS.SLOP_BLOCK_ENABLED]: false,
   [STORAGE_KEYS.DETECTION_COUNT]: 0,
-  [STORAGE_KEYS.USER_WHITELIST]: [] as string[],
   [STORAGE_KEYS.BLUR_MODE]: true,
   [STORAGE_KEYS.GROQ_API_KEY]: '',
   [STORAGE_KEYS.AI_DETECTION_ENABLED]: false,

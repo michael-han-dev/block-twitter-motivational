@@ -30,13 +30,6 @@
   will-change: filter, opacity !important;
 }
 
-
-.slop-debug {
-  outline: 2px dashed orange !important;
-  outline-offset: 2px !important;
-}
-
-
 .slop-blurred button,
 .slop-blurred a,
 .slop-blurred [role="button"] {
@@ -135,17 +128,6 @@
 
 .slop-tweet-expanded {
   transition: all 0.3s ease;
-}
-
-
-.slop-debug-detected {
-  outline: 2px solid red !important;
-  outline-offset: 2px !important;
-}
-
-.slop-debug-processed {
-  outline: 2px dashed green !important;
-  outline-offset: 2px !important;
 }
 
  

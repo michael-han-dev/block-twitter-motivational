@@ -1,20 +1,5 @@
 import { getStorageValue, setStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '../utils/storage';
 
-const ICONS = {
-  ENABLED: {
-    16: 'icons/icon16.png',
-    32: 'icons/icon32.png',
-    48: 'icons/icon32.png',
-    128: 'icons/icon128.png'
-  },
-  DISABLED: {
-    16: 'icons/icon16-disabled.png',
-    32: 'icons/icon32-disabled.png',
-    48: 'icons/icon32-disabled.png', 
-    128: 'icons/icon128-disabled.png'
-  }
-};
-
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') {
     await setStorageValue(STORAGE_KEYS.SLOP_BLOCK_ENABLED, DEFAULT_VALUES[STORAGE_KEYS.SLOP_BLOCK_ENABLED]);
