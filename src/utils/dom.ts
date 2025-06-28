@@ -1,5 +1,4 @@
-import { TweetMetadata } from './storage';
-
+import { TweetMetadata, getStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from './storage';
 declare global {
   interface Window {
     slopBlockRemoveFromCollapsed?: (tweetId: string) => void;
@@ -56,9 +55,15 @@ function fallbackHash(content: string): string {
   return 'h' + Math.abs(hash);
 }
 
-function extractTweetData(element: Element): TweetMetadata | null {
+async function extractTweetData(element: Element): Promise<TweetMetadata | null> {
+  let blockedKeywords: string[];
   try {
-    if (hasAttachment(element)) {
+    blockedKeywords = await getStorageValue(
+      STORAGE_KEYS.BLOCKED_KEYWORDS,
+      DEFAULT_VALUES[STORAGE_KEYS.BLOCKED_KEYWORDS]
+    );
+
+    if (hasAttachment(element) && blockedKeywords.length === 0) {
       return null;
     }
 
@@ -238,6 +243,9 @@ function collapseAITweet(element: HTMLElement): void {
   const originalContent = element.innerHTML;
   element.setAttribute('data-ai-original-content', originalContent);
 
+  const userElement = element.querySelector('[data-testid="User-Name"]')?.textContent?.trim() || 'unknown';
+  const handle = userElement.match(/@\w+/)?.[0] || 'unknown';
+
   const aiBar = document.createElement('div');
   aiBar.className = 'ai-tweet-bar';
   aiBar.style.cssText = `
@@ -256,7 +264,7 @@ function collapseAITweet(element: HTMLElement): void {
   `;
 
   aiBar.innerHTML = `
-    <span style="color: #657786; font-size: 13px; font-weight: 400;">ai tweet hidden</span>
+    <span style="color: #657786; font-size: 13px; font-weight: 400;">${handle}: ai tweet hidden</span>
     <span style="color: #657786; font-size: 12px;">▼</span>
   `;
 
@@ -314,7 +322,7 @@ function expandAITweet(element: HTMLElement): void {
   `;
 
   hideHeader.innerHTML = `
-    <span style="color: #657786; font-size: 13px; font-weight: 400;">🤖 hide ai tweet</span>
+    <span style="color: #657786; font-size: 13px; font-weight: 400;">unhide</span>
     <span style="color: #657786; font-size: 12px;">▲</span>
   `;
 

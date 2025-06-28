@@ -106,10 +106,10 @@ async function flushQueue() {
   handleFlags(flagged);
 }
 
-function processTweet(el: HTMLElement) {
+async function processTweet(el: HTMLElement) {
   if (!isEnabled) return;
   
-  const data = extractTweetData(el);
+  const data = await extractTweetData(el);
   if (!data) return;
   const { id, text } = data;
   if (!id) return;
