@@ -15,6 +15,7 @@ export async function analyzeTweetsWithLLM(
   
   let apiKey: string;
   let prompt: string;
+  let blockedKeywords: string[];
   
   try {
     apiKey = await getStorageValue(
@@ -38,12 +39,21 @@ export async function analyzeTweetsWithLLM(
       STORAGE_KEYS.SYSTEM_PROMPT,
       DEFAULT_VALUES[STORAGE_KEYS.SYSTEM_PROMPT]
     );
+    
+    blockedKeywords = await getStorageValue(
+      STORAGE_KEYS.BLOCKED_KEYWORDS,
+      DEFAULT_VALUES[STORAGE_KEYS.BLOCKED_KEYWORDS]
+    );
   } catch (storageError) {
     console.warn('SlopBlock: Extension context invalidated, skipping analysis');
     return null;
   }
 
-  const userContent = `Analyze these ${tweets.length} tweets and identify which are AI-generated motivational slop, engagement bait, or generic inspirational content. Return ONLY a JSON object with format: {"results": [{"id": 0, "isSlop": true/false, "confidence": 0.0-1.0}]}
+  const keywordInstruction = blockedKeywords.length > 0 
+    ? `\nAdditionally, mark a tweet as slop with confidence 1.0 if it contains any of the blocked keywords—or a recognizable obfuscated form of them—where “recognizable” means the keyword appears irrespective of case, with or without intervening punctuation, underscores, periods, or whitespace, and with common numeric or symbol substitutions for visually similar letters (for example "@", “0” for “o,” “1” for “l,” “3” for “e”). Treat the keyword as present even inside hashtags, @-mentions, or longer handles (e.g. “@trycluely,” “clu.ely,” “c1uely,” “c l u e l y”). Do not flag tweets where the letters form an unrelated English word with a distinct meaning (for example, “clue” in a detective context does not trigger on “cluely”): ${blockedKeywords.join(', ')}`
+    : '';
+
+  const userContent = `Analyze these ${tweets.length} tweets and identify which are AI-generated motivational slop, engagement bait, or generic inspirational content. Return ONLY a JSON object with format: {"results": [{"id": 0, "isSlop": true/false, "confidence": 0.0-1.0}]}${keywordInstruction}
 
 Tweets:
 ${tweets.map((tweet, i) => `${i}: ${tweet}`).join('\n\n')}`;

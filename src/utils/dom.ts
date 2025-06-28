@@ -381,29 +381,6 @@ function expandFromStub(element: HTMLElement): void {
   element.removeAttribute('data-original-content');
 }
 
-function extractUsernameInfo(element: HTMLElement): { displayName: string | null, handle: string | null } {
-  const userNameElement = element.querySelector('[data-testid="User-Name"]');
-  
-  let displayName: string | null = null;
-  let handle: string | null = null;
-
-  if (userNameElement) {
-    const nameSpans = userNameElement.querySelectorAll('span');
-    for (const span of Array.from(nameSpans)) {
-      const text = span.textContent?.trim();
-      if (text) {
-        if (text.startsWith('@')) {
-          handle = text.substring(1);
-        } else if (!displayName && !text.includes('@')) {
-          displayName = text;
-        }
-      }
-    }
-  }
-
-  return { displayName, handle };
-}
-
 
 
 export { 
