@@ -1,4 +1,4 @@
-import { getStorageValue, setStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '../utils/storage';
+import { getStorageValue, setStorageValue, getLocalStorageValue, setLocalStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '../utils/storage';
 
 interface UIElements {
   statusText: HTMLElement;
@@ -90,7 +90,7 @@ function showSettingsView(): void {
 async function saveApiKey(): Promise<void> {
   const apiKey = elements.apiKeyInput.value.trim();
   if (apiKey) {
-    await setStorageValue(STORAGE_KEYS.GROQ_API_KEY, apiKey);
+    await setLocalStorageValue(STORAGE_KEYS.GROQ_API_KEY, apiKey);
     savedApiKey = apiKey;
     elements.apiKeyInput.value = maskKey(apiKey);
     elements.saveApiKeyButton.textContent = 'Saved!';
@@ -101,7 +101,7 @@ async function saveApiKey(): Promise<void> {
 }
 
 async function loadSettings(): Promise<void> {
-  const apiKey = await getStorageValue(STORAGE_KEYS.GROQ_API_KEY, '');
+  const apiKey = await getLocalStorageValue(STORAGE_KEYS.GROQ_API_KEY, '');
   savedApiKey = apiKey;
   
   elements.apiKeyInput.value = maskKey(apiKey);

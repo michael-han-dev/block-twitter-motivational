@@ -1,6 +1,6 @@
 console.log('SlopBlock: Content script loaded');
 
-import { getLocalStorageValue, setLocalStorageValue, getStorageValue, STORAGE_KEYS } from '../utils/storage';
+import { getLocalStorageValue, setLocalStorageValue, getStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from '../utils/storage';
 import { getTweetElements, extractTweetData, collapseAITweet } from '../utils/dom';
 import { analyzeTweetsWithLLM } from '../utils/groq';
 
@@ -12,7 +12,7 @@ const BATCH_SIZE = 10;
 
 let processed: string[] = [];
 let collapsedTweetIds: string[] = [];
-  let queue: TweetInfo[] = [];
+let queue: TweetInfo[] = [];
 const elementMap = new Map<string, HTMLElement>();
 let isEnabled = false;
 let observer: MutationObserver | null = null;
@@ -107,8 +107,8 @@ async function flushQueue() {
 }
 
 async function processTweet(el: HTMLElement) {
+  let blockedKeywords: string[];
   if (!isEnabled) return;
-  
   const data = await extractTweetData(el);
   if (!data) return;
   const { id, text } = data;
@@ -123,8 +123,12 @@ async function processTweet(el: HTMLElement) {
     }
     return;
   }
+  blockedKeywords = await getStorageValue(
+    STORAGE_KEYS.BLOCKED_KEYWORDS,
+    DEFAULT_VALUES[STORAGE_KEYS.BLOCKED_KEYWORDS]
+  );
   
-  if (processed.includes(id)) return;
+  if (processed.includes(id) && blockedKeywords.length === 0) return;
 
   console.log('SlopBlock: Processing tweet', id, text.substring(0, 50) + '...');
   addProcessed(id);

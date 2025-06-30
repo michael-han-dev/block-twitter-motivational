@@ -1,4 +1,4 @@
-import { getStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from './storage';
+import { getStorageValue, getLocalStorageValue, STORAGE_KEYS, DEFAULT_VALUES } from './storage';
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -18,7 +18,7 @@ export async function analyzeTweetsWithLLM(
   let blockedKeywords: string[];
   
   try {
-    apiKey = await getStorageValue(
+    apiKey = await getLocalStorageValue(
       STORAGE_KEYS.GROQ_API_KEY,
       DEFAULT_VALUES[STORAGE_KEYS.GROQ_API_KEY]
     );
@@ -50,7 +50,7 @@ export async function analyzeTweetsWithLLM(
   }
 
   const keywordInstruction = blockedKeywords.length > 0 
-    ? `\nAdditionally, mark a tweet as slop with confidence 1.0 if it contains any of the blocked keywords—or a recognizable obfuscated form of them—where “recognizable” means the keyword appears irrespective of case, with or without intervening punctuation, underscores, periods, or whitespace, and with common numeric or symbol substitutions for visually similar letters (for example "@", “0” for “o,” “1” for “l,” “3” for “e”). Treat the keyword as present even inside hashtags, @-mentions, or longer handles (e.g. “@trycluely,” “clu.ely,” “c1uely,” “c l u e l y”). Do not flag tweets where the letters form an unrelated English word with a distinct meaning (for example, “clue” in a detective context does not trigger on “cluely”): ${blockedKeywords.join(', ')}`
+    ? `\nAdditionally, mark a tweet as slop with confidence 1.0 if it contains any of the blocked keywords/phrases —or a recognizable obfuscated form of them—where “recognizable” means the keyword appears irrespective of case, with or without intervening punctuation, underscores, periods, or whitespace, and with common numeric or symbol substitutions for visually similar letters (for example "@", “0” for “o,” “1” for “l,” “3” for “e”). Treat the keyword as present even inside hashtags, @-mentions, or longer handles (e.g. “@trycluely,” “clu.ely,” “c1uely,” “c l u e l y”). Do not flag tweets where the letters form an unrelated English word with a distinct meaning (for example, “clue” in a detective context does not trigger on “cluely”): ${blockedKeywords.join(', ')}`
     : '';
 
   const userContent = `Analyze these ${tweets.length} tweets and identify which are AI-generated motivational slop, engagement bait, or generic inspirational content. Return ONLY a JSON object with format: {"results": [{"id": 0, "isSlop": true/false, "confidence": 0.0-1.0}]}${keywordInstruction}
