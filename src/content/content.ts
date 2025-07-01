@@ -64,7 +64,6 @@ async function analyzeBatch(batch: TweetInfo[]): Promise<Set<string>> {
   
   try {
     const results = await analyzeTweetsWithLLM(texts);
-    console.log('SlopBlock: Analysis results:', results);
     
     if (!results) {
       console.log('SlopBlock: No API results');
@@ -99,8 +98,8 @@ function handleFlags(flags: Set<string>) {
   });
 }
 
-async function flushQueue() {
-  if (queue.length < BATCH_SIZE) return;
+async function flushQueue(force = false) {
+  if (!force && queue.length < BATCH_SIZE) return;
   const batch = queue.splice(0, BATCH_SIZE);
   const flagged = await analyzeBatch(batch);
   handleFlags(flagged);
@@ -108,11 +107,25 @@ async function flushQueue() {
 
 async function processTweet(el: HTMLElement) {
   let blockedKeywords: string[];
-  if (!isEnabled) return;
+  if (!isEnabled) {
+    return;
+  }
+  
+  if (el.hasAttribute('data-ai-collapsed')) {
+    console.log('SlopBlock: Tweet already collapsed, skipping');
+    return;
+  }
+  
   const data = await extractTweetData(el);
-  if (!data) return;
+  if (!data) {
+    console.log('SlopBlock: extractTweetData returned null, skipping tweet');
+    return;
+  }
   const { id, text } = data;
-  if (!id) return;
+  if (!id) {
+    console.log('SlopBlock: No tweet ID found, skipping');
+    return;
+  }
   
   elementMap.set(id, el);
   
@@ -140,7 +153,11 @@ function initialScan() {
   if (!isEnabled) return;
   const tweets = getTweetElements();
   console.log('SlopBlock: Initial scan found', tweets.length, 'tweets');
-  tweets.forEach(el => processTweet(el as HTMLElement));
+  
+  setTimeout(() => {
+    tweets.forEach(el => processTweet(el as HTMLElement));
+    flushQueue(true);
+  }, 500);
 }
 
 function startObserver() {
@@ -204,15 +221,12 @@ async function updateExtensionState() {
 
 chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'stateChanged') {
-    console.log('SlopBlock: Received state change message');
     updateExtensionState();
   }
 });
 
 (async () => {
-  console.log('SlopBlock: Initializing extension');
   await loadProcessed();
   await loadCollapsedTweets();
   await updateExtensionState();
-  console.log('SlopBlock: Initialization complete');
 })();

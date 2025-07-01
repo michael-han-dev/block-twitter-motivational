@@ -22,9 +22,7 @@ export async function analyzeTweetsWithLLM(
       STORAGE_KEYS.GROQ_API_KEY,
       DEFAULT_VALUES[STORAGE_KEYS.GROQ_API_KEY]
     );
-    
-    console.log('SlopBlock: API key status:', apiKey ? `Found (${apiKey.length} chars, starts with: ${apiKey.substring(0, 10)}...)` : 'NOT FOUND');
-    
+     
     if (!apiKey) {
       console.warn('SlopBlock: No API key set – skipping remote analysis');
       return null;
@@ -53,7 +51,7 @@ export async function analyzeTweetsWithLLM(
     ? `\nAdditionally, mark a tweet as slop with confidence 1.0 if it contains any of the blocked keywords/phrases —or a recognizable obfuscated form of them—where “recognizable” means the keyword appears irrespective of case, with or without intervening punctuation, underscores, periods, or whitespace, and with common numeric or symbol substitutions for visually similar letters (for example "@", “0” for “o,” “1” for “l,” “3” for “e”). Treat the keyword as present even inside hashtags, @-mentions, or longer handles (e.g. “@trycluely,” “clu.ely,” “c1uely,” “c l u e l y”). Do not flag tweets where the letters form an unrelated English word with a distinct meaning (for example, “clue” in a detective context does not trigger on “cluely”): ${blockedKeywords.join(', ')}`
     : '';
 
-  const userContent = `Analyze these ${tweets.length} tweets and identify which are AI-generated motivational slop, engagement bait, or generic inspirational content. Return ONLY a JSON object with format: {"results": [{"id": 0, "isSlop": true/false, "confidence": 0.0-1.0}]}${keywordInstruction}
+  const userContent = `Analyze these ${tweets.length} tweets, identify which are AI-generated motivational slop, engagement bait, or generic inspirational content. ${keywordInstruction}
 
 Tweets:
 ${tweets.map((tweet, i) => `${i}: ${tweet}`).join('\n\n')}`;
@@ -70,9 +68,9 @@ ${tweets.map((tweet, i) => `${i}: ${tweet}`).join('\n\n')}`;
   ];
 
   const body = {
-    model: 'meta-llama/llama-4-maverick-17b-128e-instruct',
-    temperature: 0.1,
-    max_tokens: 1000,
+    model: 'qwen/qwen3-32b',
+    temperature: 0.3,
+    max_tokens: 4000,
     messages,
     response_format: { type: 'json_object' }
   };
