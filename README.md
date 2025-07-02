@@ -8,8 +8,6 @@ A Chrome extension that helps you avoid AI-generated and low-quality content on 
 - Client-side processing for privacy (no backend server needed)
 - Visual indicators for detected low-quality content
 - Customizable keyword blocking
-- Badge counter for blocked content
-- Toggle extension on/off easily
 
 ## Prerequisites
 
