@@ -1,6 +1,6 @@
 # Block Twitter Motivational
 
-A Chrome extension that helps you avoid AI-generated and low-quality content on Twitter/X.com by analyzing tweets using LLM integration.
+A Chrome extension that helps you avoid AI-generated and low-quality content on Twitter/X.com by analyzing tweets using LLM integration. Here's the demo video: [https://x.com/michaelyhan_/status/1940209692967673959](https://x.com/michaelyhan_/status/1940209692967673959)
 
 ## Features
 
